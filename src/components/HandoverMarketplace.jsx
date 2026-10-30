@@ -7,7 +7,7 @@ const blank = { title: "", price: "", description: "", image: "" };
 export default function HandoverMarketplace({ role, listingId: listingIdProp }) {
   const store = useStore();
   const listings = store.listings.filter((listing) => listing.mode === "rent");
-  const [selectedListingId, setSelectedListingId] = useState(listingIdProp || listings[0]?.id || "");
+  const [selectedListingId, setSelectedListingId] = useState(listingIdProp || (window.location.pathname === "/handover" ? "l4" : listings[0]?.id) || "");
   const listingId = listingIdProp || selectedListingId;
   const items = (store.handoverItems || []).filter(item => item.listingId === listingId);
   const [form, setForm] = useState(blank);
