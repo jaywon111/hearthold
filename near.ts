@@ -8,7 +8,7 @@ import { setupSender } from '@near-wallet-selector/sender';
 import type { WalletSelector } from '@near-wallet-selector/core';
 
 export const CONTRACT_ID = import.meta.env.VITE_CONTRACT_ID || 'hearthold-jay.testnet';
-export const TOKEN_ID = import.meta.env.VITE_TOKEN_ID || 'hearthold-ft-jay.testnet';
+export const TOKEN_ID = import.meta.env.VITE_TOKEN_ID || 'ft.hearthold-jay.testnet';
 export const ARBITRATOR_ID = import.meta.env.VITE_ARBITRATOR_ID || '';
 export const RPC = 'https://rpc.testnet.near.org';
 let selectorPromise: Promise<WalletSelector> | undefined;

@@ -8,7 +8,7 @@ import { setupMeteorWallet } from "@near-wallet-selector/meteor-wallet";
 import { setupSender } from "@near-wallet-selector/sender";
 if (!globalThis.Buffer) globalThis.Buffer=Buffer;
 export const CONTRACT_ID=import.meta.env.VITE_CONTRACT_ID||"hearthold-jay.testnet";
-export const TOKEN_ID=import.meta.env.VITE_TOKEN_ID||"hearthold-ft-jay.testnet";
+export const TOKEN_ID=import.meta.env.VITE_TOKEN_ID||"ft.hearthold-jay.testnet";
 export const RPC="https://rpc.testnet.near.org";
 let selectorPromise,modal;
 export async function getSelector(){if(!selectorPromise)selectorPromise=setupWalletSelector({network:{networkId:"testnet",nodeUrl:RPC,helperUrl:"https://helper.testnet.near.org",explorerUrl:"https://testnet.nearblocks.io",indexerUrl:"https://testnet-api.kitwallet.app"},modules:[setupMyNearWallet(),setupHereWallet(),setupMeteorWallet(),setupSender()]});return selectorPromise;}
