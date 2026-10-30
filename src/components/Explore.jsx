@@ -34,6 +34,10 @@ export default function Explore({ go, role }) {
   const cap = Number(income) * 12 * 0.3;
   const purchaseCap = Number(income) * 36;
   const affordable = income ? store.listings.filter(l => l.mode === "rent" ? l.price <= cap : l.price <= purchaseCap) : [];
+  const handoverCounts = (store.handoverItems || []).reduce((counts, item) => {
+    if (item.listingId && item.status !== "sold") counts[item.listingId] = (counts[item.listingId] || 0) + 1;
+    return counts;
+  }, {});
   const fmt = n => `₦${Math.round(n || 0).toLocaleString("en-NG")}`;
 
   return (
@@ -101,6 +105,7 @@ export default function Explore({ go, role }) {
                     <Naira value={l.price} className="text-[18px] font-semibold" />
                     {l.status === "escrow" && <p className="text-[12px] text-[#793400]">In simulated escrow</p>}
                     {l.status === "sold" && <p className="text-[12px] text-[#615d59]">Sold (simulated)</p>}
+                    {handoverCounts[l.id] > 0 && <p className="mt-2 border-t border-[#e6e2dc] pt-3 text-[12px] uppercase tracking-[.12em] text-[#315c4c]">Handover · {handoverCounts[l.id]} {handoverCounts[l.id] === 1 ? "item" : "items"} from previous renter</p>}
                   </div>
                 </button>
                 <button aria-label={store.savedIds.includes(l.id)?"Remove from saved":"Save listing"} onClick={()=>toggleSaved(l.id)} className="absolute right-3 top-3 grid size-11 place-items-center rounded-full bg-white/95 text-xl shadow">{store.savedIds.includes(l.id)?"♥":"♡"}</button>

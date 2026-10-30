@@ -36,9 +36,9 @@ export function seedData() {
     ],
     escrows: [],
     handoverItems: [
-      { id: "hi-cooker", title: "Gas cooker", price: 85000, description: "4-burner cooker, working well and staying in the kitchen.", image: "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=900&q=80", seller: "amara", status: "available", offer: null, createdAt: daysAgo(1) },
-      { id: "hi-table", title: "Dining table", price: 120000, description: "Wooden dining table with four chairs.", image: "https://images.unsplash.com/photo-1617806118233-18e1de247200?auto=format&fit=crop&w=900&q=80", seller: "amara", status: "available", offer: null, createdAt: daysAgo(1) },
-      { id: "hi-fridge", title: "Fridge", price: 175000, description: "Good condition, available for pickup at move-in.", image: "https://images.unsplash.com/photo-1571175443880-49e1d25b2bc5?auto=format&fit=crop&w=900&q=80", seller: "amara", status: "available", offer: null, createdAt: daysAgo(1) },
+      { id: "hi-cooker", listingId: "l4", title: "Gas cooker", price: 85000, description: "4-burner cooker, working well and staying in the kitchen.", image: "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=900&q=80", seller: "amara", status: "available", offer: null, createdAt: daysAgo(1) },
+      { id: "hi-table", listingId: "l4", title: "Dining table", price: 120000, description: "Wooden dining table with four chairs.", image: "https://images.unsplash.com/photo-1617806118233-18e1de247200?auto=format&fit=crop&w=900&q=80", seller: "amara", status: "available", offer: null, createdAt: daysAgo(1) },
+      { id: "hi-fridge", listingId: "l4", title: "Fridge", price: 175000, description: "Good condition, available for pickup at move-in.", image: "https://images.unsplash.com/photo-1571175443880-49e1d25b2bc5?auto=format&fit=crop&w=900&q=80", seller: "amara", status: "available", offer: null, createdAt: daysAgo(1) },
     ],
     handovers: { amara: { moveOut: daysAhead(21), notes: "Left the wall shelves and the gas cooker. Painted the sitting room in March.", fixtures: ["Gas cooker", "Wall shelves", "Ceiling fan (sitting room)"], upgrades: ["Replaced the kitchen tap", "Installed a water tank stand"], updatedAt: daysAgo(1), listingId: "l4" } },
     handoverEvents: [{ id: "h1", at: daysAgo(6), text: "Move-out date set to 21 days from now" }, { id: "h2", at: daysAgo(1), text: "Notes on fixtures and upgrades added" }],
