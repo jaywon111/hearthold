@@ -12,9 +12,9 @@ Frontend: `npm install && npm run build`; `npm run dev` starts the local preview
 
 ## MVP boundaries
 
-The contract accepts deposits only from its configured NEP-141 token account using `ft_transfer_call`, checks the agreement ID and amount, blocks early landlord withdrawal, supports renter confirmation, time-gated permissionless release, dispute freeze and arbitrator resolution. Installment schedules are prefunded in full. NEAR contracts do not debit renter wallets or wake themselves up, so release calls require a transaction after the deadline. The frontend is a static demo and does not connect a wallet or send transactions yet. Its buttons explain the transaction flow without pretending a chain action occurred.
+The contract accepts deposits only from its configured NEP-141 test token using `ft_transfer_call`, binds the first renter to a listed property, validates the exact amount, blocks early release, supports renter confirmation, time-gated permissionless release, dispute freeze and arbitrator resolution. Installment schedules are prefunded in full. The frontend connects a NEAR testnet wallet and reads agreement state from chain. NEAR contracts do not debit renter wallets or wake themselves up, so release calls require a transaction after the deadline.
 
-The UI uses an illustrative NGN rent amount and a clearly labeled test token amount. No token address, testnet deployment or redeemable stablecoin is claimed. Listings are demo data and do not verify property title. Message safety screening is an in-browser keyword stub, advisory only, with messages kept off-chain.
+The UI uses illustrative NGN rent amounts and testnet wNEAR for escrow. Tokens on testnet have no real-world value. Listings are demo data and do not verify property title. Message safety screening is an in-browser keyword stub, advisory only, with messages kept off-chain.
 
 ## Security/demo notes
 
