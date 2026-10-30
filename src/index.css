@@ -1,0 +1,7 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700;800&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+:root{font-family:'DM Sans',sans-serif;color:#181a20;background:#f3f1ed;font-synthesis:none;text-rendering:optimizeLegibility;scroll-behavior:smooth}body{margin:0;min-width:320px;background:radial-gradient(ellipse at 90% 0%,rgba(179,218,221,.35),transparent 36%),#f3f1ed}button,input,select,textarea{font:inherit}::selection{background:#d2e9e4;color:#141820}.font-display{font-family:'Playfair Display',serif}.font-body{font-family:'DM Sans',sans-serif}.font-mono{font-family:'DM Mono',monospace}main{animation:page-in .45s cubic-bezier(.2,.8,.2,1) both}@keyframes page-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+
+@media(max-width:640px){html,body,#root{max-width:100%;overflow-x:hidden} main{min-width:0} button,a,input,select,textarea{max-width:100%} img,canvas,video{max-width:100%}}
