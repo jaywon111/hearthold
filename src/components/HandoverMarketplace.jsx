@@ -4,9 +4,12 @@ import { Button, Card, Eyebrow, Field, Simulated, inputCls, money } from "./ui.j
 
 const blank = { title: "", price: "", description: "", image: "" };
 
-export default function HandoverMarketplace({ role }) {
+export default function HandoverMarketplace({ role, listingId: listingIdProp }) {
   const store = useStore();
-  const items = store.handoverItems || [];
+  const listings = store.listings.filter((listing) => listing.mode === "rent");
+  const [selectedListingId, setSelectedListingId] = useState(listingIdProp || listings[0]?.id || "");
+  const listingId = listingIdProp || selectedListingId;
+  const items = (store.handoverItems || []).filter(item => item.listingId === listingId);
   const [form, setForm] = useState(blank);
   const [offerDrafts, setOfferDrafts] = useState({});
   const [notice, setNotice] = useState("");
@@ -14,7 +17,7 @@ export default function HandoverMarketplace({ role }) {
 
   const createItem = (e) => {
     e.preventDefault();
-    const item = { id: newId("hi"), ...form, price: Number(form.price), seller: "amara", status: "available", offer: null, createdAt: new Date().toISOString() };
+    const item = { id: newId("hi"), ...form, price: Number(form.price), seller: "amara", listingId, status: "available", offer: null, createdAt: new Date().toISOString() };
     update((s) => { s.handoverItems ||= []; s.handoverItems.unshift(item); return s; });
     setForm(blank); setNotice("Item listed for Tunde.");
   };
@@ -38,7 +41,7 @@ export default function HandoverMarketplace({ role }) {
 
   return <section className="grid min-w-0 gap-5" aria-label="Handover item marketplace">
     <div className="flex items-center justify-between gap-3 flex-wrap"><div><Eyebrow>Handover marketplace</Eyebrow><h2 className="font-display text-[26px] mt-1">Items staying in the flat</h2><p className="text-sm text-[#615d59] mt-1">Amara and Tunde can agree a price before move-in.</p></div><Simulated>Offers and escrow are simulated</Simulated></div>
-    {amara && <Card className="p-5 md:p-6 grid gap-4"><h3 className="font-display text-[22px]">Sell an item</h3><form onSubmit={createItem} className="grid gap-4"><div className="grid gap-4 sm:grid-cols-2"><Field label="Item name"><input required className={inputCls} placeholder="e.g. dining table" value={form.title} onChange={e=>setForm({...form,title:e.target.value})}/></Field><Field label="Price (₦)"><input required min="1" type="number" className={inputCls} value={form.price} onChange={e=>setForm({...form,price:e.target.value})}/></Field></div><Field label="Description"><input className={inputCls} placeholder="Condition, size, pickup details" value={form.description} onChange={e=>setForm({...form,description:e.target.value})}/></Field><Field label="Photo URL"><input type="url" className={inputCls} placeholder="https://…" value={form.image} onChange={e=>setForm({...form,image:e.target.value})}/></Field><div className="flex items-center gap-3"><Button type="submit">List item</Button>{notice&&<span role="status" className="text-sm text-[#087443]">{notice}</span>}</div></form></Card>}
+    {amara && !listingIdProp && <Card className="p-5 md:p-6 grid gap-4"><h3 className="font-display text-[22px]">Sell an item</h3><form onSubmit={createItem} className="grid gap-4"><Field label="Flat"><select required disabled={!listings.length} className={inputCls} value={selectedListingId} onChange={e=>{setSelectedListingId(e.target.value);setForm(blank);}}>{listings.map(listing=><option key={listing.id} value={listing.id}>{listing.title}</option>)}</select></Field><div className="grid gap-4 sm:grid-cols-2"><Field label="Item name"><input required className={inputCls} placeholder="e.g. dining table" value={form.title} onChange={e=>setForm({...form,title:e.target.value})}/></Field><Field label="Price (₦)"><input required min="1" type="number" className={inputCls} value={form.price} onChange={e=>setForm({...form,price:e.target.value})}/></Field></div><Field label="Description"><input className={inputCls} placeholder="Condition, size, pickup details" value={form.description} onChange={e=>setForm({...form,description:e.target.value})}/></Field><Field label="Photo URL"><input type="url" className={inputCls} placeholder="https://…" value={form.image} onChange={e=>setForm({...form,image:e.target.value})}/></Field><div className="flex items-center gap-3"><Button type="submit">List item</Button>{notice&&<span role="status" className="text-sm text-[#087443]">{notice}</span>}</div></form></Card>}
     {items.length === 0 ? <Card className="p-5 text-sm text-[#615d59]">No items listed yet.</Card> : <div className="grid min-w-0 gap-4 md:grid-cols-2">{items.map(item => {
       const incoming = item.offer;
       const isSeller = amara;

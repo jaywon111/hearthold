@@ -2,3 +2,4 @@ node_modules/
 dist/
 contract/target/
 screenshots/
+.near-local/

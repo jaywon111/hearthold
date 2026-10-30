@@ -62,6 +62,7 @@ function migrate(data) {
   data.escrows ||= seed.escrows;
   data.handoverItems ||= seed.handoverItems;
   data.handovers ||= seed.handovers;
+  data.handoverItems.forEach((item) => { if (!item.listingId) item.listingId = data.handovers.amara?.listingId || seed.handovers.amara.listingId; });
   data.handoverEvents ||= seed.handoverEvents;
   data.handoverMessages ||= seed.handoverMessages;
   data.handoverMessages.forEach((m) => { if (!m.listingId) m.listingId = data.handovers.amara?.listingId || seed.handovers.amara.listingId; });
