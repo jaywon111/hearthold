@@ -54,15 +54,23 @@ impl Hearthold {
         a.installments = rows;
         self.agreements.insert(&id, &a);
     }
-    /// NEP-141 ft_transfer_call receiver. Only the single configured test token is accepted.
+    /// NEP-141 ft_transfer_call receiver. Message is a listed agreement ID, or `{"listing_id":N}`.
+    /// The first renter transfer against a bare listing binds that renter and creates the exact deposit schedule.
     pub fn ft_on_transfer(&mut self, sender_id: AccountId, amount: U128, msg: String) -> U128 {
         let token = env::predecessor_account_id();
-        if token != self.allowed_token { return amount; }
-        let id: u64 = match msg.parse() { Ok(v) => v, Err(_) => return amount };
+        if token != self.allowed_token || amount.0 == 0 { return amount; }
+        let id: u64 = match near_sdk::serde_json::from_str::<near_sdk::serde_json::Value>(&msg) {
+            Ok(v) => v.get("listing_id").and_then(|v| v.as_u64()).or_else(|| msg.parse::<u64>().ok()).unwrap_or(0),
+            Err(_) => msg.parse::<u64>().unwrap_or(0),
+        };
+        if id == 0 { return amount; }
         let mut a = match self.agreements.get(&id) { Some(v) => v, None => return amount };
-        if a.status != Status::Listed || amount.0 == 0 { return amount; }
+        if a.status != Status::Listed { return amount; }
         if let Some(r) = &a.renter { if *r != sender_id { return amount; } } else { a.renter = Some(sender_id); }
-        if a.installments.is_empty() { a.installments.push(Installment { amount: amount.0, due_at: a.move_in_at, released: false }); }
+        if a.installments.is_empty() {
+            if amount.0 != a.rent_ngn { return amount; }
+            a.installments.push(Installment { amount: a.rent_ngn, due_at: a.move_in_at, released: false });
+        }
         let required: u128 = a.installments.iter().map(|i| i.amount).sum();
         if amount.0 != required { return amount; }
         a.funded = amount.0;
@@ -87,7 +95,8 @@ impl Hearthold {
         let now = env::block_timestamp();
         let mut payout = 0u128;
         for inst in a.installments.iter_mut() {
-            if !inst.released && (confirmed || now >= inst.due_at) { inst.released = true; payout += inst.amount; }
+            let releasable = if confirmed { now >= inst.due_at } else { now >= inst.due_at && now >= a.move_in_at.saturating_add(a.dispute_window_ns) };
+            if !inst.released && releasable { inst.released = true; payout += inst.amount; }
         }
         assert!(payout > 0, "no installment due");
         a.funded -= payout;
@@ -125,11 +134,13 @@ impl Hearthold {
 mod tests {
     use super::*; use near_sdk::test_utils::{accounts, VMContextBuilder}; use near_sdk::{testing_env, NearToken};
     fn ctx(who: AccountId, now: u64) { let mut c=VMContextBuilder::new(); c.current_account_id(accounts(0)).predecessor_account_id(who).block_timestamp(now).attached_deposit(NearToken::from_yoctonear(0)); testing_env!(c.build()); }
+    fn token_context(who: AccountId, now: u64) { let mut c=VMContextBuilder::new(); c.current_account_id(accounts(0)).predecessor_account_id(accounts(2)).signer_account_id(accounts(2)).block_timestamp(now).attached_deposit(NearToken::from_yoctonear(0)); testing_env!(c.build()); let _=who; }
     fn setup() -> Hearthold { ctx(accounts(1), 10); Hearthold::new(accounts(2), accounts(3)) }
-    fn listing(c: &mut Hearthold) -> u64 { ctx(accounts(1),10); c.list_property(accounts(2),U128(500_000),"2-bed, Yaba, Lagos".into(),100,20) }
-    #[test] fn list_and_fund_receiver_allowlist_and_amount() { let mut c=setup(); let id=listing(&mut c); ctx(accounts(2),20); assert_eq!(c.ft_on_transfer(accounts(4),U128(100),id.to_string()).0,100); assert_eq!(c.ft_on_transfer(accounts(4),U128(200),id.to_string()).0,0); assert_eq!(c.get_agreement(id).status,"funded"); }
-    #[test] fn renter_confirm_and_landlord_cannot_trigger_early_release() { let mut c=setup(); let id=listing(&mut c); ctx(accounts(2),20); c.ft_on_transfer(accounts(4),U128(100),id.to_string()); ctx(accounts(1),120); assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(||c.auto_release(id))).is_err()); ctx(accounts(4),100); c.confirm_move_in(id); assert_eq!(c.get_agreement(id).status,"released"); }
-    #[test] fn auto_release_waits_for_deadline_and_permissionless() { let mut c=setup(); let id=listing(&mut c); ctx(accounts(2),20); c.ft_on_transfer(accounts(4),U128(100),id.to_string()); ctx(accounts(5),119); assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(||c.auto_release(id))).is_err()); ctx(accounts(5),120); c.auto_release(id); assert_eq!(c.get_agreement(id).status,"released"); }
-    #[test] fn dispute_freezes_release_until_arbitrator() { let mut c=setup(); let id=listing(&mut c); ctx(accounts(2),20); c.ft_on_transfer(accounts(4),U128(100),id.to_string()); ctx(accounts(4),30); c.open_dispute(id,"not as described".into()); ctx(accounts(5),120); assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(||c.auto_release(id))).is_err()); ctx(accounts(3),120); c.resolve_dispute(id,false); assert_eq!(c.get_agreement(id).status,"released"); }
-    #[test] fn prefunded_schedule_releases_only_due_installments() { let mut c=setup(); let id=listing(&mut c); ctx(accounts(1),10); c.set_schedule(id,vec![U128(40),U128(60)],vec![100,200]); ctx(accounts(2),20); assert_eq!(c.ft_on_transfer(accounts(4),U128(100),id.to_string()).0,0); ctx(accounts(4),100); c.confirm_move_in(id); assert_eq!(c.get_agreement(id).released_count,1); assert_eq!(c.get_agreement(id).funded.0,60); ctx(accounts(5),220); c.auto_release(id); assert_eq!(c.get_agreement(id).status,"released"); }
+    fn listing(c: &mut Hearthold) -> u64 { ctx(accounts(1),10); c.list_property(accounts(2),U128(100),"2-bed, Yaba, Lagos".into(),100,20) }
+    #[test] fn renter_can_fund_listing_json_id_exactly_once() { let mut c=setup(); let id=listing(&mut c); token_context(accounts(4),20); let msg=near_sdk::serde_json::json!({"listing_id":id,"amount":"100","description":"2-bed, Yaba, Lagos","move_in_at":100,"dispute_window_ns":20}).to_string(); assert_eq!(c.ft_on_transfer(accounts(4),U128(99),msg.clone()).0,99); assert_eq!(c.ft_on_transfer(accounts(4),U128(100),msg).0,0); let view=c.get_agreement(id); assert_eq!(view.status,"funded"); assert_eq!(view.renter,Some(accounts(4))); assert_eq!(view.funded.0,100); assert_eq!(c.ft_on_transfer(accounts(4),U128(100),id.to_string()).0,100); }
+    #[test] fn landlord_created_flow_remains() { let mut c=setup(); let id=listing(&mut c); token_context(accounts(4),20); assert_eq!(c.ft_on_transfer(accounts(4),U128(100),id.to_string()).0,0); assert_eq!(c.get_agreement(id).status,"funded"); }
+    #[test] fn renter_confirm_and_landlord_cannot_trigger_early_release() { let mut c=setup(); let id=listing(&mut c); token_context(accounts(4),20); c.ft_on_transfer(accounts(4),U128(100),id.to_string()); ctx(accounts(1),119); assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(||c.auto_release(id))).is_err()); ctx(accounts(4),100); c.confirm_move_in(id); assert_eq!(c.get_agreement(id).status,"released"); }
+    #[test] fn auto_release_waits_for_deadline_and_permissionless() { let mut c=setup(); let id=listing(&mut c); token_context(accounts(4),20); c.ft_on_transfer(accounts(4),U128(100),id.to_string()); ctx(accounts(5),119); assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(||c.auto_release(id))).is_err()); ctx(accounts(5),120); c.auto_release(id); assert_eq!(c.get_agreement(id).status,"released"); }
+    #[test] fn dispute_freezes_release_until_arbitrator() { let mut c=setup(); let id=listing(&mut c); token_context(accounts(4),20); c.ft_on_transfer(accounts(4),U128(100),id.to_string()); ctx(accounts(4),30); c.open_dispute(id,"not as described".into()); ctx(accounts(5),120); assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(||c.auto_release(id))).is_err()); ctx(accounts(3),120); c.resolve_dispute(id,false); assert_eq!(c.get_agreement(id).status,"released"); }
+    #[test] fn prefunded_schedule_releases_only_due_installments() { let mut c=setup(); let id=listing(&mut c); ctx(accounts(1),10); c.set_schedule(id,vec![U128(40),U128(60)],vec![100,200]); token_context(accounts(4),20); assert_eq!(c.ft_on_transfer(accounts(4),U128(100),id.to_string()).0,0); ctx(accounts(4),100); c.confirm_move_in(id); assert_eq!(c.get_agreement(id).released_count,1); assert_eq!(c.get_agreement(id).funded.0,60); ctx(accounts(5),220); c.auto_release(id); assert_eq!(c.get_agreement(id).status,"released"); }
 }
