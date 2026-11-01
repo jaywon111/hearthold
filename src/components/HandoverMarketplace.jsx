@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { newId, update, useStore } from "../lib/store.js";
-import { transferHethToSeller, getConnectedAccount } from "../lib/near.js";
+import { transferHethToSeller, getConnectedAccount, getSelector, CONTRACT_ID } from "../lib/near.js";
 import { Button, Card, Eyebrow, Field, Simulated, inputCls, money } from "./ui.jsx";
 
 // Fixed marketplace conversion: 1 HETH = ₦1,000,000. HETH uses 24 decimals.
@@ -24,6 +24,7 @@ export default function HandoverMarketplace({ role, listingId: listingIdProp }) 
   const [offerDrafts, setOfferDrafts] = useState({});
   const [notice, setNotice] = useState("");
   const [account, setAccount] = useState("");
+  const [busyItem, setBusyItem] = useState("");
   const amara = role === "amara";
   const isItemOwner = item => item.seller === role || (!!account && item.sellerAccount === account);
   useEffect(() => { getConnectedAccount().then(setAccount).catch(() => {}); }, []);
@@ -40,12 +41,14 @@ export default function HandoverMarketplace({ role, listingId: listingIdProp }) 
     setOfferDrafts((d) => ({ ...d, [item.id]: "" })); setNotice("Offer sent to Amara.");
   };
   const act = (item, action, amount) => {
+    const canRespond = action === "counter" ? item.offer?.state === "pending" && !item.offer.counterUsed : ["accept", "reject"].includes(action) && ["pending", "countered"].includes(item.offer?.state);
+    if (!isItemOwner(item) || !canRespond) return;
     update((s) => {
       const target = s.handoverItems.find((x) => x.id === item.id);
       if (!target?.offer || !isItemOwner(target)) return s;
-      if (action === "counter" && !target.offer.counterUsed && amount > 0) target.offer = { ...target.offer, state: "countered", counterAmount: Number(amount), counterUsed: true };
-      if (action === "accept") target.offer = { ...target.offer, state: "accepted", agreedAmount: target.offer.state === "countered" ? target.offer.counterAmount : target.offer.amount };
-      if (action === "reject") target.offer = { ...target.offer, state: "rejected" };
+      if (action === "counter" && target.offer.state === "pending" && !target.offer.counterUsed && amount > 0) target.offer = { ...target.offer, state: "countered", counterAmount: Number(amount), counterUsed: true };
+      if (action === "accept" && ["pending", "countered"].includes(target.offer.state)) target.offer = { ...target.offer, state: "accepted", agreedAmount: target.offer.state === "countered" ? target.offer.counterAmount : target.offer.amount };
+      if (action === "reject" && ["pending", "countered"].includes(target.offer.state)) target.offer = { ...target.offer, state: "rejected" };
       if (action === "hold" && target.offer.state === "accepted") target.offer.state = "held";
       if (action === "release" && target.offer.state === "held") { target.offer.state = "released"; target.status = "sold"; }
       return s;
@@ -62,16 +65,22 @@ export default function HandoverMarketplace({ role, listingId: listingIdProp }) 
         <div className="relative min-h-56 overflow-hidden bg-[#e6e0d5] md:min-h-[300px]">{item.image ? <img src={item.image} alt={item.title} className="absolute inset-0 size-full object-cover"/> : <div className="absolute inset-0 grid place-items-center font-display text-3xl text-[#8c8377]">A piece with a story</div>}</div><div className="grid content-start gap-5 py-5 md:py-2"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="font-mono text-[11px] uppercase tracking-[0.15em] text-[#615d59]">{item.status === "sold" ? "Placed" : "Available for handover"}</p><h3 className="mt-2 font-display text-[clamp(30px,3vw,42px)] leading-tight capitalize">{item.title}</h3></div><p className="font-display text-[25px]">{money.format(item.price)}</p></div>{item.description&&<p className="max-w-[52ch] text-base leading-relaxed text-[#615d59]">{item.description}</p>}
         {incoming && <div className="border-y border-[#d8d0c4] py-4 text-sm grid gap-3"><p className="font-medium">Offer: {money.format(incoming.amount)}{incoming.counterUsed&&incoming.counterAmount?` · seller countered ${money.format(incoming.counterAmount)}`:""}</p><p className="text-[#615d59]">{incoming.state === "pending" ? "Waiting for item owner" : incoming.state === "countered" ? "Your response needed" : incoming.state === "accepted" ? "Offer accepted" : incoming.state === "rejected" ? "Offer declined" : ""}</p>
           {isSeller && incoming.state === "pending" && <div className="flex flex-wrap gap-2"><Button onClick={()=>act(item,"accept")}>Accept offer</Button>{!incoming.counterUsed&&<Button variant="secondary" onClick={()=>{const val=window.prompt("Counter-offer amount in naira");if(val&&Number(val)>0)act(item,"counter",Number(val));}}>Counter once</Button>}<Button variant="ghost" onClick={()=>act(item,"reject")}>Reject</Button></div>}
-          {!isSeller && incoming.state === "countered" && <div className="flex gap-2"><Button onClick={()=>act(item,"accept")}>Accept counter</Button><Button variant="ghost" onClick={()=>act(item,"reject")}>Reject</Button></div>}
+          {isSeller && incoming.state === "countered" && <div className="flex flex-wrap gap-2"><Button onClick={()=>act(item,"accept")}>Accept counter</Button><Button variant="ghost" onClick={()=>act(item,"reject")}>Reject</Button></div>}
           {!isSeller && incoming.state === "accepted" && <div className="grid justify-items-start gap-2"><Button onClick={async()=>{
     let transferAmount;
     try { transferAmount = toHethBaseUnits(incoming.agreedAmount || incoming.amount); } catch (error) { setNotice(error?.message || "Invalid offer amount."); return; }
     try {
+      const selector = await getSelector();
+      const buyer = selector.store.getState().accounts[0]?.accountId;
+      if (!buyer || buyer !== account) throw new Error("Connect the buyer wallet for this accepted offer.");
+      setBusyItem(item.id);
       const outcome = await transferHethToSeller(transferAmount, item.sellerAccount);
       const failed = outcome?.status?.Failure || outcome?.transaction_outcome?.outcome?.status?.Failure || outcome?.final_execution_outcome?.status?.Failure;
-      setNotice(failed ? "HETH transfer failed on testnet." : "HETH transfer confirmed on testnet.");
+      if (failed) throw new Error("HETH transfer failed on testnet.");
+      setNotice("HETH transfer confirmed on testnet.");
     } catch (error) { setNotice(error?.message || "HETH transfer failed."); }
-  }}>Pay with HETH</Button><span className="text-xs text-[#615d59]">Direct transfer, not escrowed.</span></div>}
+    finally { setBusyItem(""); }
+  }}>Pay with HETH</Button><span className="text-xs text-[#615d59]">Testnet HETH direct transfer to the outgoing tenant. This is not escrowed; confirm only if you accept that risk.</span></div>}
         </div>}
         {!isItemOwner(item) && item.status === "available" && (!incoming || ["rejected"].includes(incoming.state)) && <form className="flex flex-col gap-3 sm:flex-row sm:items-end" onSubmit={e=>{e.preventDefault();offer(item,offerDrafts[item.id]);}}><label className="grid gap-1 flex-1"><span className="text-xs font-medium">Your offer (₦)</span><input aria-label={`Offer for ${item.title}`} type="number" min="1" required className={inputCls} value={offerDrafts[item.id]||""} onChange={e=>setOfferDrafts({...offerDrafts,[item.id]:e.target.value})}/></label><Button type="submit">Make an offer</Button></form>}
       </div></article>;
