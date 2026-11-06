@@ -1,14 +1,16 @@
-use near_sdk::json_types::U64;
+use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
+use near_sdk::json_types::U128;
 use near_sdk::store::{LookupMap, UnorderedMap};
-use near_sdk::{env, near_bindgen, AccountId, Gas, NearToken, PanicOnDefault, Promise, Timestamp};
+use near_sdk::{env, near_bindgen, AccountId, NearToken, PanicOnDefault};
 
-#[derive(Clone, PartialEq)]
+#[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq)]
+#[near(serializers = [json])]
 pub enum AgreementType {
     Rent,
     Sale,
 }
 
-#[derive(Clone)]
+#[derive(BorshDeserialize, BorshSerialize, Clone)]
 pub struct Agreement {
     pub id: u64,
     pub landlord: AccountId,
@@ -26,8 +28,26 @@ pub struct Agreement {
     pub buyer_receipt_confirmed: bool,
 }
 
+#[near(serializers = [json])]
+pub struct AgreementView {
+    pub id: u64,
+    pub landlord: AccountId,
+    pub renter: Option<AccountId>,
+    pub token: AccountId,
+    pub amount: U128,
+    pub move_in_time_ns: u64,
+    pub dispute_window_ns: u64,
+    pub status: String,
+    pub funded_amount: U128,
+    pub is_disputed: bool,
+    pub dispute_reason: Option<String>,
+    pub agreement_type: AgreementType,
+    pub seller_handover_confirmed: bool,
+    pub buyer_receipt_confirmed: bool,
+}
+
 #[near_bindgen]
-#[derive(PanicOnDefault)]
+#[derive(PanicOnDefault, BorshDeserialize, BorshSerialize)]
 pub struct Contract {
     pub allowed_token: AccountId,
     pub arbitrator: AccountId,
@@ -61,24 +81,22 @@ impl Contract {
         self.next_id - 1
     }
 
-    pub fn get_agreement(&self, id: u64) -> Option<serde_json::Value> {
-        self.agreements.get(&id).map(|a| {
-            serde_json::json!({
-                "id": a.id,
-                "landlord": a.landlord,
-                "renter": a.renter,
-                "token": a.token,
-                "amount": a.amount.to_string(),
-                "move_in_time_ns": a.move_in_time_ns,
-                "dispute_window_ns": a.dispute_window_ns,
-                "status": a.status,
-                "funded_amount": a.funded_amount.to_string(),
-                "is_disputed": a.is_disputed,
-                "dispute_reason": a.dispute_reason,
-                "agreement_type": format!("{:?}", a.agreement_type),
-                "seller_handover_confirmed": a.seller_handover_confirmed,
-                "buyer_receipt_confirmed": a.buyer_receipt_confirmed,
-            })
+    pub fn get_agreement(&self, id: u64) -> Option<AgreementView> {
+        self.agreements.get(&id).map(|a| AgreementView {
+            id: a.id,
+            landlord: a.landlord.clone(),
+            renter: a.renter.clone(),
+            token: a.token.clone(),
+            amount: U128(a.amount),
+            move_in_time_ns: a.move_in_time_ns,
+            dispute_window_ns: a.dispute_window_ns,
+            status: a.status.clone(),
+            funded_amount: U128(a.funded_amount),
+            is_disputed: a.is_disputed,
+            dispute_reason: a.dispute_reason.clone(),
+            agreement_type: a.agreement_type.clone(),
+            seller_handover_confirmed: a.seller_handover_confirmed,
+            buyer_receipt_confirmed: a.buyer_receipt_confirmed,
         })
     }
 
@@ -139,7 +157,7 @@ impl Contract {
         agreement.status = "funded".to_string();
         self.agreements.insert(agreement_id, agreement);
 
-        U128(0) // Keep all tokens
+        U128(0)
     }
 
     pub fn confirm_move_in(&mut self, id: u64) {
@@ -208,9 +226,8 @@ impl Contract {
         if award_to_landlord {
             self.release_funds(&mut agreement);
         } else {
-            // Refund renter
             let renter = agreement.renter.clone().expect("No renter");
-            let promise = near_sdk::ext_contract(agreement.token.clone())
+            near_sdk::ext_contract(agreement.token.clone())
                 .ft_transfer(renter, U128(agreement.funded_amount), None)
                 .with_attached_deposit(NearToken::from_yoctonear(1));
             agreement.status = "refunded".to_string();
@@ -240,7 +257,7 @@ impl Contract {
     }
 
     fn release_funds(&mut self, agreement: &mut Agreement) {
-        let promise = near_sdk::ext_contract(agreement.token.clone())
+        near_sdk::ext_contract(agreement.token.clone())
             .ft_transfer(agreement.landlord.clone(), U128(agreement.funded_amount), None)
             .with_attached_deposit(NearToken::from_yoctonear(1));
         
