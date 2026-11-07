@@ -100,3 +100,23 @@ export async function transferHethToSeller(amount, sellerAccount) {
     actions: [{ type: "FunctionCall", params: { methodName: "ft_transfer_call", args: { receiver_id: sellerAccount, amount: String(amount), msg: "" }, gas: "100000000000000", deposit: "1" } }],
   });
 }
+
+function readReturn(outcome) {
+  for (const candidate of [outcome?.status?.SuccessValue, outcome?.transaction_outcome?.outcome?.status?.SuccessValue, outcome?.transaction?.status?.SuccessValue]) {
+    if (candidate) {
+      try { return new TextDecoder().decode(Uint8Array.from(atob(candidate), c => c.charCodeAt(0))).replace(/^\"|\"$/g, ""); } catch { }
+    }
+  }
+  return "";
+}
+
+export async function listProperty({ amount, moveInTimeNs, disputeWindowNs, agreementType = "Rent" }) {
+  const result = await change("list_property", {
+    amount: String(amount),
+    move_in_time_ns: Number(moveInTimeNs),
+    dispute_window_ns: Number(disputeWindowNs),
+    agreement_type_str: agreementType
+  });
+  const id = readReturn(result);
+  return { result, agreementId: id };
+}
