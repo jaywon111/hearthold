@@ -1,7 +1,7 @@
 name: Deploy Contract
 
 on:
-  workflow_dispatch: # This lets you run it manually by clicking a button
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -29,14 +29,11 @@ jobs:
       - name: Create Credentials
         run: |
           mkdir -p ~/.near-credentials/testnet
-          cat <<EOF > ~/.near-credentials/testnet/jayisagod.testnet.json
-          {"account_id": "jayisagod.testnet", "private_key": "${{ secrets.NEAR_PRIVATE_KEY }}"}
-          EOF
+          echo '{"account_id": "hearthold-escrow.testnet", "private_key": "${{ secrets.NEAR_PRIVATE_KEY }}"}' > ~/.near-credentials/testnet/hearthold-escrow.testnet.json
 
       - name: Deploy to Testnet
         run: |
           near deploy hearthold-escrow.testnet ./contract/target/wasm32-unknown-unknown/release/hearthold_contract.wasm \
-            --accountId jayisagod.testnet \
             --initFunction new \
             --initArgs '{"allowed_token": "ft.hearthold-jay.testnet", "arbitrator": "hearthold-arbitrator.testnet"}' \
             --initGas 100000000000000 \
