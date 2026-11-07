@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { change, CONTRACT_ID, depositToken, getConnectedAccount, showWalletModal, TOKEN_ID, view } from "../lib/near.js";
+import { change, CONTRACT_ID, depositToken, getConnectedAccount, getArbitrator, showWalletModal, TOKEN_ID, view, rateLandlord } from "../lib/near.js";
 import * as THREE from "three";
 import { AnimatePresence, motion } from "framer-motion";
 import { ROLES, detectFraud, newId, update, useStore, FLAGGED_DEMO } from "../lib/store.js";
@@ -8,68 +8,251 @@ import { TenantHandover } from "./Handover.jsx";
 import HandoverMarketplace from "./HandoverMarketplace.jsx";
 
 function rooms(type) { return type === "land" ? ["Plot boundary", "Access road", "Frontage"] : type === "commercial" ? ["Shop front", "Main floor", "Store room"] : ["Sitting room", "Bedroom", "Kitchen"]; }
+
 function Scene3D({ listing, roomIndex }) {
   const mount = useRef(null);
   const image = useMemo(() => listing.image || "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1200&q=80", [listing.image]);
   useEffect(() => {
-    const host=mount.current; if(!host)return;
-    const scene=new THREE.Scene(); scene.background=new THREE.Color("#d7d2c9");
-    const camera=new THREE.PerspectiveCamera(62,host.clientWidth/host.clientHeight,.1,100); camera.position.set(0,1.55,4.8);
-    const renderer=new THREE.WebGLRenderer({antialias:true}); renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.8)); renderer.setSize(host.clientWidth,host.clientHeight); renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.toneMapping=THREE.ACESFilmicToneMapping; host.appendChild(renderer.domElement);
-    scene.add(new THREE.HemisphereLight(0xfff4df,0x6a645e,2)); const sun=new THREE.DirectionalLight(0xffffff,2); sun.position.set(-2,5,4); scene.add(sun);
-    const mat=(c)=>new THREE.MeshStandardMaterial({color:c,roughness:.9}); const floor=new THREE.Mesh(new THREE.PlaneGeometry(9,9),mat("#b7a58d")); floor.rotation.x=-Math.PI/2; scene.add(floor);
-    const back=new THREE.Mesh(new THREE.PlaneGeometry(9,3.8),mat("#eee9df")); back.position.set(0,1.9,-3); scene.add(back);
-    const left=new THREE.Mesh(new THREE.PlaneGeometry(9,3.8),mat("#d9d0c4")); left.rotation.y=Math.PI/2; left.position.set(-4.5,1.9,1.5); scene.add(left);
-    const right=new THREE.Mesh(new THREE.PlaneGeometry(9,3.8),mat("#e5ddd0")); right.rotation.y=-Math.PI/2; right.position.set(4.5,1.9,1.5); scene.add(right);
-    const loader=new THREE.TextureLoader(); loader.setCrossOrigin("anonymous"); let loadedTexture=null;
-    loader.load(image,(tex)=>{loadedTexture=tex;tex.colorSpace=THREE.SRGBColorSpace;const art=new THREE.Mesh(new THREE.PlaneGeometry(3.2,1.8),new THREE.MeshBasicMaterial({map:tex}));art.position.set(0,2.15,-2.94);scene.add(art);},undefined,()=>{});
-    const sofa=new THREE.Mesh(new THREE.BoxGeometry(2.2,.55,.8),mat("#49665e"));sofa.position.set(-.45,.42,.25);scene.add(sofa);const backrest=new THREE.Mesh(new THREE.BoxGeometry(2.2,.52,.26),mat("#38534c"));backrest.position.set(-.45,.88,-.02);scene.add(backrest);
-    const table=new THREE.Mesh(new THREE.BoxGeometry(1.15,.12,.65),mat("#805a3f"));table.position.set(.9,.52,.8);scene.add(table);const rug=new THREE.Mesh(new THREE.PlaneGeometry(3.2,2.1),mat("#b97e61"));rug.rotation.x=-Math.PI/2;rug.position.set(.05,.02,.8);scene.add(rug);
-    const target=new THREE.Vector3(0,1.35,0), desired=new THREE.Vector3(0,1.55,4.8);let yaw=0,pitch=0,drag=false,px=0,py=0;
-    const down=e=>{drag=true;px=e.clientX;py=e.clientY;renderer.domElement.setPointerCapture?.(e.pointerId);};const move=e=>{if(!drag)return;yaw+=(e.clientX-px)*.004;pitch=Math.max(-.18,Math.min(.35,pitch+(e.clientY-py)*.003));px=e.clientX;py=e.clientY;};const up=()=>drag=false;
-    renderer.domElement.addEventListener("pointerdown",down);renderer.domElement.addEventListener("pointermove",move);window.addEventListener("pointerup",up);
-    let raf;const render=()=>{raf=requestAnimationFrame(render);desired.set(Math.sin(yaw)*4.8,1.55+pitch,Math.cos(yaw)*4.8);camera.position.lerp(desired,.075);camera.lookAt(target);renderer.render(scene,camera);};render();
-    const resize=()=>{const w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h);};const observer=new ResizeObserver(resize);observer.observe(host);
-    return()=>{cancelAnimationFrame(raf);observer.disconnect();renderer.domElement.removeEventListener("pointerdown",down);renderer.domElement.removeEventListener("pointermove",move);window.removeEventListener("pointerup",up);loadedTexture?.dispose();renderer.dispose();renderer.domElement.remove();scene.traverse(o=>{o.geometry?.dispose();if(Array.isArray(o.material))o.material.forEach(m=>m.dispose());else o.material?.dispose();});};
-  },[image,roomIndex]);
-  return <div ref={mount} className="absolute inset-0 touch-none cursor-grab active:cursor-grabbing" aria-label="Drag to orbit the simulated 3D room"/>;
-}
-export function Walkthrough({listing}) { const list=rooms(listing.type);const [i,setI]=useState(0);return <Card className="p-5"><div className="flex items-center justify-between gap-3 flex-wrap"><Eyebrow>3D room walkthrough (beta)</Eyebrow><Simulated>Simulated preview. Not a real scan.</Simulated></div><div className="mt-4 h-72 rounded-xl bg-[#d7d2c9] relative overflow-hidden"><Scene3D listing={listing} roomIndex={i}/><span className="absolute left-3 bottom-3 rounded-full bg-black/65 px-3 py-1 text-xs text-white pointer-events-none">drag to look around</span></div><div className="mt-4 flex items-center justify-between gap-3 flex-wrap"><div className="flex gap-2 flex-wrap" role="tablist" aria-label="Rooms">{list.map((r,n)=><button key={r} role="tab" aria-selected={n===i} onClick={()=>setI(n)} className={`min-h-[44px] px-3 rounded-full text-[14px] ${n===i?"bg-[#0075de] text-white":"bg-[#f6f5f4] text-[#31302e]"}`}>{r}</button>)}</div><Button variant="secondary" onClick={()=>setI((i+1)%list.length)}>Next room</Button></div></Card>;}
-function FraudBanner({hits}) {return <AnimatePresence>{hits.length>0&&<motion.div role="alert" initial={{height:0,opacity:0}} animate={{height:"auto",opacity:1}} exit={{height:0,opacity:0}} transition={soft} className="overflow-hidden"><div className="rounded-lg bg-[#ffe9d6] border border-[#dd5b00]/40 p-3 text-[14px] text-[#793400]"><p className="font-semibold">Possible scam wording</p><p>Contains {hits.map(h=>`"${h}"`).join(", ")}. Keep payments inside Hearthold escrow and never send money to a personal account.</p></div></motion.div>}</AnimatePresence>;}
-export function Thread({listing,role,onBack}) {
- const store=useStore(),[draft,setDraft]=useState("");const hits=useMemo(()=>detectFraud(draft),[draft]);const msgs=store.messages.filter(m=>m.listingId===listing.id&&(role===listing.owner?(m.to===role||m.from===role):(m.from===role||m.to===role))&&(m.from!=="amara"&&m.to!=="amara"));const other=role===listing.owner?"tunde":listing.owner;
- const send=text=>{const clean=text.trim();if(!clean)return;const flagged=detectFraud(clean);update(s=>{s.messages.push({id:newId("m"),listingId:listing.id,from:role,to:other,text:clean,at:new Date().toISOString(),flagged});return s;});setDraft("");};
- return <div className="grid gap-4"><div className="flex min-w-0 items-center gap-3"><Button variant="ghost" onClick={onBack} className="shrink-0">← Back</Button><p className="min-w-0 font-semibold truncate">{listing.title}</p></div><Card className="min-w-0 p-4 grid gap-3 max-h-[50vh] overflow-y-auto">{msgs.length===0&&<p className="text-[#615d59]">No messages yet. Say hello to start the thread.</p>}{msgs.map(m=>{const mine=m.from===role;return <motion.div key={m.id} layout initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} transition={spring} className={`flex ${mine?"justify-end":"justify-start"}`}><div className={`min-w-0 w-fit max-w-[85%] break-words [overflow-wrap:anywhere] rounded-2xl px-4 py-2.5 text-[15px] ${mine?"bg-[#0075de] text-white":"bg-[#f6f5f4] text-black"}`}><p className="break-words [overflow-wrap:anywhere]">{m.text}</p>{m.flagged?.length>0&&<p className="mt-1 text-[12px] font-semibold break-words [overflow-wrap:anywhere]">Flagged: {m.flagged.join(", ")}</p>}<p className={`mt-1 text-[11px] ${mine?"text-white/85":"text-[#615d59]"}`}>{ROLES[m.from]?.short||"Demo user"} · {fmtAgo(m.at)}</p></div></motion.div>;})}</Card><FraudBanner hits={hits}/><form onSubmit={e=>{e.preventDefault();send(draft);}} className="grid gap-3"><label htmlFor="draft" className="sr-only">Message</label><textarea id="draft" value={draft} onChange={e=>setDraft(e.target.value)} rows={3} placeholder={`Message ${ROLES[other].short}`} className={`${inputCls} min-w-0 w-full max-w-full`}/><div className="flex flex-wrap gap-3 justify-between">{role===listing.owner&&<Button variant="secondary" type="button" onClick={()=>send(FLAGGED_DEMO)}>Send flagged demo message</Button>}<Button type="submit" disabled={!draft.trim()}>Send message</Button></div></form></div>;
-}
-const parseHeth=value=>{const text=String(value).trim();if(!/^\d+(\.\d{0,24})?$/.test(text))return null;const [units,decimals=""]=text.split(".");return BigInt(units)*10n**24n+BigInt((decimals+"0".repeat(24)).slice(0,24));};
-function EscrowPanel({listing,ownerView=false}) {
- const cachedId=String(listing.agreementId||localStorage.getItem(`hearthold:agreement:${listing.id}`)||"");const [agreementId,setAgreementId]=useState(cachedId);const [amount,setAmount]=useState("");const persistedState=(()=>{try{const value=JSON.parse(localStorage.getItem(`hearthold:agreement-state:${listing.id}`)||"null");return value&&String(value.id)===cachedId?value:null}catch{return null}})();const [state,setState]=useState(persistedState);const [busy,setBusy]=useState(false);const [error,setError]=useState("");const [reason,setReason]=useState("");const [account,setAccount]=useState("");const [now,setNow]=useState(Date.now());
- useEffect(()=>{let active=true;getConnectedAccount().then(a=>{if(active)setAccount(a)}).catch(()=>{});return()=>{active=false}},[]);
- useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer)},[]);
- const persistAgreement=(value)=>{setState(value);try{localStorage.setItem(`hearthold:agreement-state:${listing.id}`,JSON.stringify(value));if(value?.id)localStorage.setItem(`hearthold:agreement:${listing.id}`,String(value.id));}catch{}};const refresh=async(id=agreementId)=>{if(!id){persistAgreement(null);return;}setError("");try{const value=await view("get_agreement",{id:Number(id)});persistAgreement(value);setAgreementId(String(value.id));}catch(e){setError(e.message||"Could not read agreement from NEAR testnet.");}};
- const discover=async()=>{setError("");try{const count=Number(await view("get_agreement_count"));for(let id=count;id>0;id--){const value=await view("get_agreement",{id});if(value.description?.includes(`[hearthold:${listing.id}]`)){setAgreementId(String(id));persistAgreement(value);return;}}persistAgreement(null);setAgreementId("");setError("No onchain agreement is linked to this listing yet. The landlord must publish it first.");}catch(e){setError(e.message||"Could not check NEAR testnet agreement status.");}};
- useEffect(()=>{if(cachedId)refresh(cachedId);else discover()},[listing.id]);
- useEffect(()=>{if(!agreementId||agreementId==="0")return;const timer=setInterval(()=>refresh(agreementId),10000);return()=>clearInterval(timer);},[agreementId]);
- const run=async(fn)=>{setBusy(true);setError("");try{await fn();await refresh();}catch(e){setError(e.message||"NEAR testnet transaction failed.");}finally{setBusy(false);}};
- const connect=async()=>{const selector=await showWalletModal();await new Promise(resolve=>{const unsub=selector.store.observable.subscribe(s=>{if(s.accounts[0]?.accountId){unsub.unsubscribe();resolve();}});setTimeout(()=>{unsub.unsubscribe();resolve();},90000)});setAccount(await getConnectedAccount());};
- const whole=state?.funded?BigInt(state.funded)/10n**24n:0n;const frac=state?.funded?(BigInt(state.funded)%10n**24n).toString().padStart(24,"0").slice(0,6):"000000";const parsedAmount=parseHeth(amount);const validAmount=parsedAmount!==null&&parsedAmount>0n;const moveIn=state?Number(state.move_in_at)/1e6:0;const deadline=state?.dispute_window_ns?moveIn+Number(state.dispute_window_ns)/1e6:0;const remaining=Math.max(0,deadline-now);const countdown=`${Math.floor(remaining/86400000)}d ${Math.floor(remaining%86400000/3600000)}h ${Math.floor(remaining%3600000/60000)}m`;
- if(listing.mode!=="rent")return null;
- return <Card className="min-w-0 p-5 md:p-7 grid gap-5 border-[#d9ded9] bg-[#fffefa]"><div className="flex items-start justify-between gap-3 flex-wrap"><div><Eyebrow>NEAR testnet escrow</Eyebrow><p className="mt-2 font-display text-[24px] leading-tight">Fund this listing</p></div><span className="rounded-full bg-[#e5f1ea] px-3 py-1.5 text-xs text-[#244b38]">Testnet. HETH moves on-chain, no real money.</span></div><p className="text-sm text-[#615d59] break-all">Escrow {CONTRACT_ID} · HETH {TOKEN_ID}</p>
- {!account?<div className="grid gap-3"><p className="text-sm">Connect a NEAR testnet wallet to fund this listing.</p><Button onClick={connect}>Connect wallet</Button></div>:<><p className="text-sm break-all">Connected: <b>{account}</b></p>{busy&&!state&&<p className="text-sm text-[#615d59]">Checking live agreement…</p>}{state&&<div className="flex items-center justify-between gap-3 border-y border-[#e7e2da] py-3"><span className="text-sm text-[#615d59]">Agreement #{state.id} · live status</span><span className="rounded-full bg-[#e5f1ea] px-3 py-1.5 text-xs capitalize text-[#244b38]">{state.status}</span></div>}
-+ {state?.status==="listed"&&!ownerView&&account!==state.landlord&&<div className="grid gap-3"><label className="grid gap-1 text-sm">Funding amount (HETH)<span className="text-xs text-[#615d59]">Listing price reference: ₦{Number(listing.price||state.rent_ngn||0).toLocaleString("en-NG")} NGN. Enter the HETH amount to send.</span><input aria-label="Funding amount in HETH" value={amount} onChange={e=>setAmount(e.target.value)} inputMode="decimal" placeholder="e.g. 1.25 HETH" className={inputCls}/></label><Button disabled={busy||!validAmount} onClick={()=>run(()=>depositToken(parsedAmount.toString(),agreementId))}>{busy?"Waiting for wallet…":"Fund escrow"}</Button><p className="text-xs text-[#615d59]">The token contract sends HETH to escrow and tags agreement #{agreementId}.</p></div>}
-+ {state?.status==="listed"&&(ownerView||account===state.landlord)&&<p className="text-sm text-[#615d59]">You are the landlord on this agreement.</p>}
-
- {state&&state.status==="funded"&&<><p className="text-sm">Move-in is confirmed by the connected renter. If no dispute is opened before the dispute window ends, anyone can trigger the automatic release. A dispute freezes escrow until the arbitrator resolves it.</p><p className="text-sm">Auto-release in <b>{remaining>0?countdown:"deadline reached"}</b>.</p><div className="flex gap-2 flex-wrap">{account===state.renter&&<Button disabled={busy||now<moveIn} onClick={()=>run(()=>change("confirm_move_in",{id:Number(agreementId)}))}>Confirm move-in</Button>}{now>=deadline&&<Button variant="secondary" disabled={busy} onClick={()=>run(()=>change("auto_release",{id:Number(agreementId)}))}>Trigger auto-release</Button>}{(account===state.renter||account===state.landlord)&&<><input aria-label="Dispute reason" value={reason} onChange={e=>setReason(e.target.value)} placeholder="Dispute reason" className={`${inputCls} min-w-0 flex-1`}/><Button variant="danger" disabled={busy||!reason.trim()} onClick={()=>run(()=>change("open_dispute",{id:Number(agreementId),reason}))}>Open dispute</Button></>}</div></>}
- {state&&state.status==="disputed"&&account!==CONTRACT_ID&&<p className="text-sm">Escrow is frozen. Resolution is restricted to the contract arbitrator wallet.</p>}
- {state&&state.status==="disputed"&&account===CONTRACT_ID&&<div className="grid gap-2"><p className="text-sm">Connected wallet matches the configured arbitrator wallet.</p><div className="flex gap-2 flex-wrap"><Button disabled={busy} onClick={()=>run(()=>change("resolve_dispute",{id:Number(agreementId),pay_landlord:true}))}>Resolve to landlord</Button><Button variant="secondary" disabled={busy} onClick={()=>run(()=>change("resolve_dispute",{id:Number(agreementId),pay_landlord:false}))}>Resolve to renter</Button></div></div>}
- {state&&state.status==="released"&&<p className="text-sm">Escrow released. This agreement is complete.</p>}
- {error&&<p role="alert" className="text-sm text-red-700 break-words">{error}</p>}<div className="flex gap-2 flex-wrap"><Button variant="ghost" onClick={()=>refresh()} disabled={!agreementId||busy}>Refresh onchain status</Button>{!agreementId&&<Button variant="secondary" disabled={busy} onClick={discover}>{busy?"Checking chain…":"Check agreement"}</Button>}</div></>}</Card>;
+    const host = mount.current; if (!host) return;
+    const scene = new THREE.Scene(); scene.background = new THREE.Color("#d7d2c9");
+    const camera = new THREE.PerspectiveCamera(62, host.clientWidth / host.clientHeight, .1, 100); camera.position.set(0, 1.55, 4.8);
+    const renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.8)); renderer.setSize(host.clientWidth, host.clientHeight); renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; host.appendChild(renderer.domElement);
+    scene.add(new THREE.HemisphereLight(0xfff4df, 0x6a645e, 2)); const sun = new THREE.DirectionalLight(0xffffff, 2); sun.position.set(-2, 5, 4); scene.add(sun);
+    const mat = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: .9 }); const floor = new THREE.Mesh(new THREE.PlaneGeometry(9, 9), mat("#b7a58d")); floor.rotation.x = -Math.PI / 2; scene.add(floor);
+    const back = new THREE.Mesh(new THREE.PlaneGeometry(9, 3.8), mat("#eee9df")); back.position.set(0, 1.9, -3); scene.add(back);
+    const left = new THREE.Mesh(new THREE.PlaneGeometry(9, 3.8), mat("#d9d0c4")); left.rotation.y = Math.PI / 2; left.position.set(-4.5, 1.9, 1.5); scene.add(left);
+    const right = new THREE.Mesh(new THREE.PlaneGeometry(9, 3.8), mat("#e5ddd0")); right.rotation.y = -Math.PI / 2; right.position.set(4.5, 1.9, 1.5); scene.add(right);
+    const loader = new THREE.TextureLoader(); loader.setCrossOrigin("anonymous"); let loadedTexture = null;
+    loader.load(image, (tex) => { loadedTexture = tex; tex.colorSpace = THREE.SRGBColorSpace; const art = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 1.8), new THREE.MeshBasicMaterial({ map: tex })); art.position.set(0, 2.15, -2.94); scene.add(art); }, undefined, () => { });
+    const sofa = new THREE.Mesh(new THREE.BoxGeometry(2.2, .55, .8), mat("#49665e")); sofa.position.set(-.45, .42, .25); scene.add(sofa); const backrest = new THREE.Mesh(new THREE.BoxGeometry(2.2, .52, .26), mat("#38534c")); backrest.position.set(-.45, .88, -.02); scene.add(backrest);
+    const table = new THREE.Mesh(new THREE.BoxGeometry(1.15, .12, .65), mat("#805a3f")); table.position.set(.9, .52, .8); scene.add(table); const rug = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 2.1), mat("#b97e61")); rug.rotation.x = -Math.PI / 2; rug.position.set(.05, .02, .8); scene.add(rug);
+    const target = new THREE.Vector3(0, 1.35, 0), desired = new THREE.Vector3(0, 1.55, 4.8); let yaw = 0, pitch = 0, drag = false, px = 0, py = 0;
+    const down = e => { drag = true; px = e.clientX; py = e.clientY; renderer.domElement.setPointerCapture?.(e.pointerId); }; const move = e => { if (!drag) return; yaw += (e.clientX - px) * .004; pitch = Math.max(-.18, Math.min(.35, pitch + (e.clientY - py) * .003)); px = e.clientX; py = e.clientY; }; const up = () => drag = false;
+    renderer.domElement.addEventListener("pointerdown", down); renderer.domElement.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+    let raf; const render = () => { raf = requestAnimationFrame(render); desired.set(Math.sin(yaw) * 4.8, 1.55 + pitch, Math.cos(yaw) * 4.8); camera.position.lerp(desired, .075); camera.lookAt(target); renderer.render(scene, camera); }; render();
+    const resize = () => { const w = host.clientWidth, h = host.clientHeight; if (!w || !h) return; camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h); }; const observer = new ResizeObserver(resize); observer.observe(host);
+    return () => { cancelAnimationFrame(raf); observer.disconnect(); renderer.domElement.removeEventListener("pointerdown", down); renderer.domElement.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); loadedTexture?.dispose(); renderer.dispose(); renderer.domElement.remove(); scene.traverse(o => { o.geometry?.dispose(); if (Array.isArray(o.material)) o.material.forEach(m => m.dispose()); else o.material?.dispose(); }); };
+  }, [image, roomIndex]);
+  return <div ref={mount} className="absolute inset-0 touch-none cursor-grab active:cursor-grabbing" aria-label="Drag to orbit the simulated 3D room" />;
 }
 
-function Detail({id,role,go,ownerView=false}) {
- const store=useStore();const listing=store.listings.find(l=>l.id===id);const [threading,setThreading]=useState(false),[editing,setEditing]=useState(false),[editPrice,setEditPrice]=useState(""),[editDescription,setEditDescription]=useState(""),[editImage,setEditImage]=useState(""),[editError,setEditError]=useState("");
- if(!listing)return <Empty title="This listing is gone" body="It may have been removed in a reset." action={()=>go({name:"explore"})} actionLabel="Back to Explore"/>;if(ownerView&&listing.owner!=="ada")return <Empty title="Owner view unavailable" body="Only the listing owner can manage this property." action={()=>go({name:"explore"})} actionLabel="Back to Explore"/>;
- const cover=`${listing.area}, ${listing.city}`;const startEdit=()=>{setEditPrice(String(listing.price));setEditDescription(listing.description||"");setEditImage(listing.image||"");setEditing(true)};const saveEdit=e=>{e.preventDefault();if(!Number(editPrice)||Number(editPrice)<=0)return setEditError("Enter a price in naira.");setEditError("");update(s=>{const item=s.listings.find(x=>x.id===id);if(item){item.price=Number(editPrice);item.description=editDescription;item.image=editImage;item.photos=[editImage,...(item.photos||[]).slice(1)];}return s;});setEditing(false)};const onPhoto=e=>{const file=e.target.files?.[0];if(!file)return;if(!file.type.startsWith("image/"))return setEditError("Choose an image file.");if(file.size>900*1024)return setEditError("Keep the photo under 900 KB so it fits in local storage.");setEditError("");const reader=new FileReader();reader.onload=()=>setEditImage(reader.result);reader.readAsDataURL(file)};
- return <div className="grid min-w-0 gap-8">{listing.mode==="rent"&&((!ownerView&&role==="tunde")||(ownerView&&role==="ada"))&&<EscrowPanel listing={listing} ownerView={ownerView}/>}<div className="grid min-w-0 gap-6 grid-cols-1 lg:grid-cols-[1.1fr_1fr] items-start"><div className="grid min-w-0 gap-5"><motion.div layoutId={`cover-${listing.id}`} transition={spring} className="relative min-w-0 aspect-[4/3] overflow-hidden rounded-2xl bg-[#213183] text-white p-6 flex flex-col justify-between shadow-card">{listing.image&&<img src={listing.image} alt={`Photo of ${cover}`} className="absolute inset-0 size-full object-cover"/>}<div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-black/35"/><div className="relative flex justify-between gap-2 flex-wrap"><span className="font-mono text-[12px] uppercase tracking-widest">{TYPES[listing.type]} · {MODES[listing.mode]}</span>{!listing.image&&<Simulated>Photo placeholder</Simulated>}</div><p className="relative font-display text-[36px] leading-[1.02] max-w-[14ch]">{cover}</p></motion.div>{ownerView&&<Card className="min-w-0 p-4 grid gap-3"><Eyebrow>Photos</Eyebrow><div className="flex gap-3 overflow-x-auto snap-x pb-1">{(listing.photos?.length?listing.photos:[listing.image]).filter(Boolean).map((src,n)=><img key={src} src={src} alt={`Photo ${n+1} of ${cover}`} className="h-24 w-32 shrink-0 snap-start rounded-lg object-cover"/>)}</div></Card>}<Card className="min-w-0 p-5 grid gap-2"><Eyebrow>Video</Eyebrow>{listing.video?<a href={listing.video} target="_blank" rel="noreferrer" className="text-[#0075de] underline underline-offset-4 break-all">Open the video link</a>:<p className="text-[#615d59]">No video link added yet.</p>}</Card><Walkthrough listing={listing}/></div><div className="grid min-w-0 gap-5 content-start"><Card className="min-w-0 p-5 grid gap-3"><div className="flex items-start justify-between gap-3"><h1 className="min-w-0 font-display text-[clamp(23px,6vw,28px)] leading-tight break-words">{listing.title}</h1>{ownerView&&<Button variant="secondary" className="shrink-0" onClick={startEdit}>Edit</Button>}</div><Naira value={listing.price} className="text-[26px] font-semibold"/><p className="text-[#615d59] text-[14px]">{listing.mode==="rent"?"per year":"one-time sale price"} · {cover}</p><p className="text-[15px] text-[#31302e]">{listing.description}</p>{listing.fixtures?.length>0&&<ul className="flex flex-wrap gap-2 text-[13px]">{listing.fixtures.map(f=><li key={f} className="rounded-full bg-[#f6f5f4] px-3 py-1">{f}</li>)}</ul>}{!ownerView&&<Button layoutId={`msg-${listing.id}`} onClick={()=>setThreading(true)}>Message {ROLES[listing.owner].short}</Button>}</Card></div></div>{listing.mode==="rent"&&((!ownerView&&role==="tunde")||(ownerView&&role==="ada"))&&<><HandoverMarketplace role={ownerView?"amara":role} listingId={listing.id}/>{!ownerView&&<TenantHandover listingId={listing.id}/>}</>}{ownerView&&<Card className="p-5 grid gap-4"><h2 className="font-display text-[22px]">Messages</h2><Thread listing={listing} role="ada" onBack={()=>go({name:"landlord",role:"ada"})}/></Card>}{ownerView&&<Tray open={editing} onClose={()=>setEditing(false)} title="Edit listing"><form onSubmit={saveEdit} className="grid gap-4"><Field label="Price (₦)"><input type="number" min="1" inputMode="numeric" required className={inputCls} value={editPrice} onChange={e=>setEditPrice(e.target.value)}/></Field><Field label="Description"><textarea rows={4} className={inputCls} value={editDescription} onChange={e=>setEditDescription(e.target.value)}/></Field><Field label="Replace photo (max 900 KB)"><input type="file" accept="image/*" onChange={onPhoto} className="block max-w-full min-h-[44px] text-sm"/></Field>{editError&&<p role="alert" className="text-[14px] text-[#793400]">{editError}</p>}{editImage&&<img src={editImage} alt="Listing preview" className="h-36 w-full rounded-xl object-cover"/>}<div className="flex flex-wrap gap-2"><Button type="submit">Save changes</Button><Button type="button" variant="secondary" onClick={()=>setEditing(false)}>Cancel</Button></div></form></Tray>}<Tray open={threading} onClose={()=>setThreading(false)} title={`Message ${ROLES[listing.owner].short}`} layoutId={`msg-${listing.id}`}><Thread listing={listing} role={role} onBack={()=>setThreading(false)}/></Tray></div>;
+export function Walkthrough({ listing }) { const list = rooms(listing.type); const [i, setI] = useState(0); return <Card className="p-5"><div className="flex items-center justify-between gap-3 flex-wrap"><Eyebrow>3D room walkthrough (beta)</Eyebrow><Simulated>Simulated preview. Not a real scan.</Simulated></div><div className="mt-4 h-72 rounded-xl bg-[#d7d2c9] relative overflow-hidden"><Scene3D listing={listing} roomIndex={i} /><span className="absolute left-3 bottom-3 rounded-full bg-black/65 px-3 py-1 text-xs text-white pointer-events-none">drag to look around</span></div><div className="mt-4 flex items-center justify-between gap-3 flex-wrap"><div className="flex gap-2 flex-wrap" role="tablist" aria-label="Rooms">{list.map((r, n) => <button key={r} role="tab" aria-selected={n === i} onClick={() => setI(n)} className={`min-h-[44px] px-3 rounded-full text-[14px] ${n === i ? "bg-[#0075de] text-white" : "bg-[#f6f5f4] text-[#31302e]"}`}>{r}</button>)}</div><Button variant="secondary" onClick={() => setI((i + 1) % list.length)}>Next room</Button></div></Card>; }
+
+function FraudBanner({ hits }) { return <AnimatePresence>{hits.length > 0 && <motion.div role="alert" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={soft} className="overflow-hidden"><div className="rounded-lg bg-[#ffe9d6] border border-[#dd5b00]/40 p-3 text-[14px] text-[#793400]"><p className="font-semibold">Possible scam wording</p><p>Contains {hits.map(h => `"${h}"`).join(", ")}. Keep payments inside Hearthold escrow and never send money to a personal account.</p></div></motion.div>}</AnimatePresence>; }
+
+export function Thread({ listing, role, onBack }) {
+  const store = useStore(), [draft, setDraft] = useState(""); const hits = useMemo(() => detectFraud(draft), [draft]); const msgs = store.messages.filter(m => m.listingId === listing.id && (role === listing.owner ? (m.to === role || m.from === role) : (m.from === role || m.to === role)) && (m.from !== "amara" && m.to !== "amara")); const other = role === listing.owner ? "tunde" : listing.owner;
+  const send = text => { const clean = text.trim(); if (!clean) return; const flagged = detectFraud(clean); update(s => { s.messages.push({ id: newId("m"), listingId: listing.id, from: role, to: other, text: clean, at: new Date().toISOString(), flagged }); return s; }); setDraft(""); };
+  return <div className="grid gap-4"><div className="flex min-w-0 items-center gap-3"><Button variant="ghost" onClick={onBack} className="shrink-0">← Back</Button><p className="min-w-0 font-semibold truncate">{listing.title}</p></div><Card className="min-w-0 p-4 grid gap-3 max-h-[50vh] overflow-y-auto">{msgs.length === 0 && <p className="text-[#615d59]">No messages yet. Say hello to start the thread.</p>}{msgs.map(m => { const mine = m.from === role; return <motion.div key={m.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={spring} className={`flex ${mine ? "justify-end" : "justify-start"}`}><div className={`min-w-0 w-fit max-w-[85%] break-words [overflow-wrap:anywhere] rounded-2xl px-4 py-2.5 text-[15px] ${mine ? "bg-[#0075de] text-white" : "bg-[#f6f5f4] text-black"}`}><p className="break-words [overflow-wrap:anywhere]">{m.text}</p>{m.flagged?.length > 0 && <p className="mt-1 text-[12px] font-semibold break-words [overflow-wrap:anywhere]">Flagged: {m.flagged.join(", ")}</p>}<p className={`mt-1 text-[11px] ${mine ? "text-white/85" : "text-[#615d59]"}`}>{ROLES[m.from]?.short || "Demo user"} · {fmtAgo(m.at)}</p></div></motion.div>; })}</Card><FraudBanner hits={hits} /><form onSubmit={e => { e.preventDefault(); send(draft); }} className="grid gap-3"><label htmlFor="draft" className="sr-only">Message</label><textarea id="draft" value={draft} onChange={e => setDraft(e.target.value)} rows={3} placeholder={`Message ${ROLES[other].short}`} className={`${inputCls} min-w-0 w-full max-w-full`} /><div className="flex flex-wrap gap-3 justify-between">{role === listing.owner && <Button variant="secondary" type="button" onClick={() => send(FLAGGED_DEMO)}>Send flagged demo message</Button>}<Button type="submit" disabled={!draft.trim()}>Send message</Button></div></form></div>;
+}
+
+const parseHeth = value => { const text = String(value).trim(); if (!/^\d+(\.\d{0,24})?$/.test(text)) return null; const [units, decimals = ""] = text.split("."); return BigInt(units) * 10n ** 24n + BigInt((decimals + "0".repeat(24)).slice(0, 24)); };
+
+function EscrowPanel({ listing, ownerView = false }) {
+  const cachedId = String(listing.agreementId || localStorage.getItem(`hearthold:agreement:${listing.id}`) || "");
+  const [agreementId, setAgreementId] = useState(cachedId);
+  const [amount, setAmount] = useState("");
+  const [state, setState] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [reason, setReason] = useState("");
+  const [account, setAccount] = useState("");
+  const [arbitrator, setArbitrator] = useState("");
+  const [rating, setRating] = useState(5);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => { let active = true; getConnectedAccount().then(a => { if (active) setAccount(a); }).catch(() => { }); getArbitrator().then(a => { if (active) setArbitrator(a); }).catch(() => { }); return () => { active = false; }; }, []);
+  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
+
+  const persistAgreement = (value) => { setState(value); try { localStorage.setItem(`hearthold:agreement-state:${listing.id}`, JSON.stringify(value)); if (value?.id) localStorage.setItem(`hearthold:agreement:${listing.id}`, String(value.id)); } catch { } };
+  
+  const refresh = async (id = agreementId) => {
+    if (!id) { persistAgreement(null); return; }
+    setError("");
+    try {
+      const value = await view("get_agreement", { id: Number(id) });
+      persistAgreement(value); setAgreementId(String(value.id));
+    } catch (e) { setError(e.message || "Could not read agreement from NEAR testnet."); }
+  };
+  
+  const discover = async () => {
+    setError("");
+    try {
+      const count = Number(await view("get_agreement_count"));
+      for (let id = count; id > 0; id--) {
+        const value = await view("get_agreement", { id });
+        if (value && value.landlord && value.id) {
+          setAgreementId(String(id)); persistAgreement(value); return;
+        }
+      }
+      persistAgreement(null); setAgreementId(""); setError("No onchain agreement is linked to this listing yet.");
+    } catch (e) { setError(e.message || "Could not check NEAR testnet agreement status."); }
+  };
+
+  useEffect(() => { if (cachedId) refresh(cachedId); else discover(); }, [listing.id]);
+  useEffect(() => { if (!agreementId || agreementId === "0") return; const timer = setInterval(() => refresh(agreementId), 10000); return () => clearInterval(timer); }, [agreementId]);
+
+  const run = async (fn) => { setBusy(true); setError(""); try { await fn(); await refresh(); } catch (e) { setError(e.message || "NEAR testnet transaction failed."); } finally { setBusy(false); } };
+  const connect = async () => { const selector = await showWalletModal(); await new Promise(resolve => { const unsub = selector.store.observable.subscribe(s => { if (s.accounts[0]?.accountId) { unsub.unsubscribe(); resolve(); } }); setTimeout(() => { unsub.unsubscribe(); resolve(); }, 90000) }); setAccount(await getConnectedAccount()); };
+
+  const whole = state?.funded_amount ? BigInt(state.funded_amount) / 10n ** 24n : 0n; 
+  const parsedAmount = parseHeth(amount); const validAmount = parsedAmount !== null && parsedAmount > 0n;
+  const moveIn = state ? Number(state.move_in_time_ns) / 1e6 : 0; 
+  const deadline = state?.dispute_window_ns ? moveIn + Number(state.dispute_window_ns) / 1e6 : 0; 
+  const remaining = Math.max(0, deadline - now);
+  const countdown = `${Math.floor(remaining / 86400000)}d ${Math.floor(remaining % 86400000 / 3600000)}h ${Math.floor(remaining % 3600000 / 60000)}m`;
+  
+  const isLandlord = account === state?.landlord;
+  const isRenter = account === state?.renter;
+  const isArbitrator = account === arbitrator;
+
+  return (
+    <Card className="min-w-0 p-5 md:p-7 grid gap-5 border-[#d9ded9] bg-[#fffefa]">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div><Eyebrow>NEAR testnet escrow</Eyebrow><p className="mt-2 font-display text-[24px] leading-tight">Fund this listing</p></div>
+        <span className="rounded-full bg-[#e5f1ea] px-3 py-1.5 text-xs text-[#244b38]">Testnet. HETH moves on-chain, no real money.</span>
+      </div>
+      <p className="text-sm text-[#615d59] break-all">Escrow {CONTRACT_ID} · HETH {TOKEN_ID}</p>
+      
+      {!account ? (
+        <div className="grid gap-3"><p className="text-sm">Connect a NEAR testnet wallet to fund this listing.</p><Button onClick={connect}>Connect wallet</Button></div>
+      ) : (
+        <>
+          <p className="text-sm break-all">Connected: <b>{account}</b></p>
+          {busy && !state && <p className="text-sm text-[#615d59]">Checking live agreement…</p>}
+          
+          {state && (
+            <div className="flex items-center justify-between gap-3 border-y border-[#e7e2da] py-3">
+              <span className="text-sm text-[#615d59]">Agreement #{state.id} · live status</span>
+              <span className="rounded-full bg-[#e5f1ea] px-3 py-1.5 text-xs capitalize text-[#244b38]">{state.status}</span>
+            </div>
+          )}
+
+          {/* FUNDING STATE */}
+          {state?.status === "listed" && !isLandlord && (
+            <div className="grid gap-3">
+              <label className="grid gap-1 text-sm">Funding amount (HETH)<span className="text-xs text-[#615d59]">Enter the HETH amount to send.</span>
+                <input aria-label="Funding amount in HETH" value={amount} onChange={e => setAmount(e.target.value)} inputMode="decimal" placeholder="e.g. 1.25 HETH" className={inputCls} />
+              </label>
+              <Button disabled={busy || !validAmount} onClick={() => run(() => depositToken(parsedAmount.toString(), agreementId))}>{busy ? "Waiting for wallet…" : "Fund escrow"}</Button>
+            </div>
+          )}
+          {state?.status === "listed" && isLandlord && <p className="text-sm text-[#615d59]">You are the landlord on this agreement.</p>}
+
+          {/* RENT FLOW */}
+          {state && state.status === "funded" && state.agreement_type === "Rent" && !state.is_disputed && (
+            <>
+              <p className="text-sm">Move-in is confirmed by the connected renter. If no dispute is opened before the dispute window ends, anyone can trigger the automatic release.</p>
+              <p className="text-sm">Auto-release in <b>{remaining > 0 ? countdown : "deadline reached"}</b>.</p>
+              <div className="flex gap-2 flex-wrap">
+                {isRenter && <Button disabled={busy || now < moveIn} onClick={() => run(() => change("confirm_move_in", { id: Number(agreementId) }))}>Confirm move-in</Button>}
+                {now >= deadline && <Button variant="secondary" disabled={busy} onClick={() => run(() => change("auto_release", { id: Number(agreementId) }))}>Trigger auto-release</Button>}
+              </div>
+            </>
+          )}
+
+          {/* SALE FLOW */}
+          {state && state.status === "funded" && state.agreement_type === "Sale" && !state.is_disputed && (
+            <>
+              <p className="text-sm">For sales, the landlord confirms handover of documents/keys, and the buyer confirms receipt. Funds release when both are done.</p>
+              <div className="flex gap-2 flex-wrap">
+                {isLandlord && <Button disabled={busy || state.seller_handover_confirmed} onClick={() => run(() => change("confirm_handover", { id: Number(agreementId) }))}>{state.seller_handover_confirmed ? "Handover Confirmed" : "Confirm Handover (Landlord)"}</Button>}
+                {isRenter && <Button disabled={busy || state.buyer_receipt_confirmed} onClick={() => run(() => change("confirm_receipt", { id: Number(agreementId) }))}>{state.buyer_receipt_confirmed ? "Receipt Confirmed" : "Confirm Receipt (Buyer)"}</Button>}
+              </div>
+            </>
+          )}
+
+          {/* DISPUTE CONTROLS */}
+          {state && state.status === "funded" && !state.is_disputed && (isRenter || isLandlord) && (
+             <div className="flex gap-2 flex-wrap mt-2">
+                <input aria-label="Dispute reason" value={reason} onChange={e => setReason(e.target.value)} placeholder="Dispute reason" className={`${inputCls} min-w-0 flex-1`} />
+                <Button variant="danger" disabled={busy || !reason.trim()} onClick={() => run(() => change("open_dispute", { id: Number(agreementId), reason }))}>Open dispute</Button>
+             </div>
+          )}
+
+          {/* DISPUTED STATE / ARBITRATOR */}
+          {state && state.is_disputed && (
+            <div className="grid gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm font-semibold text-red-800">Escrow is frozen due to dispute: "{state.dispute_reason}"</p>
+              {isArbitrator ? (
+                <div className="flex gap-2 flex-wrap mt-2">
+                  <Button disabled={busy} onClick={() => run(() => change("resolve_dispute", { id: Number(agreementId), award_to_landlord: true }))}>Resolve to landlord</Button>
+                  <Button variant="secondary" disabled={busy} onClick={() => run(() => change("resolve_dispute", { id: Number(agreementId), award_to_landlord: false }))}>Resolve to renter</Button>
+                </div>
+              ) : (
+                <p className="text-sm text-red-700">Waiting for the arbitrator ({arbitrator}) to resolve.</p>
+              )}
+            </div>
+          )}
+
+          {/* RELEASED / RATING */}
+          {state && state.status === "released" && (
+            <div className="grid gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+              <p className="text-sm font-semibold text-green-800">Escrow released. This agreement is complete.</p>
+              {isRenter && (
+                <div className="flex gap-2 items-center mt-2">
+                  <select value={rating} onChange={e => setRating(Number(e.target.value))} className={inputCls}>
+                    <option value={5}>5 Stars</option>
+                    <option value={4}>4 Stars</option>
+                    <option value={3}>3 Stars</option>
+                    <option value={2}>2 Stars</option>
+                    <option value={1}>1 Star</option>
+                  </select>
+                  <Button disabled={busy} onClick={() => run(() => rateLandlord(agreementId, rating))}>Rate Landlord</Button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {error && <p role="alert" className="text-sm text-red-700 break-words">{error}</p>}
+          <div className="flex gap-2 flex-wrap">
+            <Button variant="ghost" onClick={() => refresh()} disabled={!agreementId || busy}>Refresh onchain status</Button>
+            {!agreementId && <Button variant="secondary" disabled={busy} onClick={discover}>{busy ? "Checking chain…" : "Check agreement"}</Button>}
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
+function Detail({ id, role, go, ownerView = false }) {
+  const store = useStore(); const listing = store.listings.find(l => l.id === id); const [threading, setThreading] = useState(false), [editing, setEditing] = useState(false), [editPrice, setEditPrice] = useState(""), [editDescription, setEditDescription] = useState(""), [editImage, setEditImage] = useState(""), [editError, setEditError] = useState("");
+  if (!listing) return <Empty title="This listing is gone" body="It may have been removed in a reset." action={() => go({ name: "explore" })} actionLabel="Back to Explore" />; if (ownerView && listing.owner !== "ada") return <Empty title="Owner view unavailable" body="Only the listing owner can manage this property." action={() => go({ name: "explore" })} actionLabel="Back to Explore" />;
+  const cover = `${listing.area}, ${listing.city}`; const startEdit = () => { setEditPrice(String(listing.price)); setEditDescription(listing.description || ""); setEditImage(listing.image || ""); setEditing(true) }; const saveEdit = e => { e.preventDefault(); if (!Number(editPrice) || Number(editPrice) <= 0) return setEditError("Enter a price in naira."); setEditError(""); update(s => { const item = s.listings.find(x => x.id === id); if (item) { item.price = Number(editPrice); item.description = editDescription; item.image = editImage; item.photos = [editImage, ...(item.photos || []).slice(1)]; } return s; }); setEditing(false) }; const onPhoto = e => { const file = e.target.files?.[0]; if (!file) return; if (!file.type.startsWith("image/")) return setEditError("Choose an image file."); if (file.size > 900 * 1024) return setEditError("Keep the photo under 900 KB so it fits in local storage."); setEditError(""); const reader = new FileReader(); reader.onload = () => setEditImage(reader.result); reader.readAsDataURL(file) };
+  
+  return (
+    <div className="grid min-w-0 gap-8">
+      {/* ESCROW PANEL NOW SHOWS FOR BOTH RENT AND SALE */}
+      {((!ownerView && role === "tunde") || (ownerView && role === "ada")) && <EscrowPanel listing={listing} ownerView={ownerView} />}
+      
+      <div className="grid min-w-0 gap-6 grid-cols-1 lg:grid-cols-[1.1fr_1fr] items-start">
+        <div className="grid min-w-0 gap-5">
+          <motion.div layoutId={`cover-${listing.id}`} transition={spring} className="relative min-w-0 aspect-[4/3] overflow-hidden rounded-2xl bg-[#213183] text-white p-6 flex flex-col justify-between shadow-card">
+            {listing.image && <img src={listing.image} alt={`Photo of ${cover}`} className="absolute inset-0 size-full object-cover" />}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-black/35" />
+            <div className="relative flex justify-between gap-2 flex-wrap"><span className="font-mono text-[12px] uppercase tracking-widest">{TYPES[listing.type]} · {MODES[listing.mode]}</span>{!listing.image && <Simulated>Photo placeholder</Simulated>}</div>
+            <p className="relative font-display text-[36px] leading-[1.02] max-w-[14ch]">{cover}</p>
+          </motion.div>
+          {ownerView && <Card className="min-w-0 p-4 grid gap-3"><Eyebrow>Photos</Eyebrow><div className="flex gap-3 overflow-x-auto snap-x pb-1">{(listing.photos?.length ? listing.photos : [listing.image]).filter(Boolean).map((src, n) => <img key={src} src={src} alt={`Photo ${n + 1} of ${cover}`} className="h-24 w-32 shrink-0 snap-start rounded-lg object-cover" />)}</div></Card>}
+          <Card className="min-w-0 p-5 grid gap-2"><Eyebrow>Video</Eyebrow>{listing.video ? <a href={listing.video} target="_blank" rel="noreferrer" className="text-[#0075de] underline underline-offset-4 break-all">Open the video link</a> : <p className="text-[#615d59]">No video link added yet.</p>}</Card>
+          <Walkthrough listing={listing} />
+        </div>
+        <div className="grid min-w-0 gap-5 content-start">
+          <Card className="min-w-0 p-5 grid gap-3">
+            <div className="flex items-start justify-between gap-3"><h1 className="min-w-0 font-display text-[clamp(23px,6vw,28px)] leading-tight break-words">{listing.title}</h1>{ownerView && <Button variant="secondary" className="shrink-0" onClick={startEdit}>Edit</Button>}</div>
+            <Naira value={listing.price} className="text-[26px] font-semibold" />
+            <p className="text-[#615d59] text-[14px]">{listing.mode === "rent" ? "per year" : "one-time sale price"} · {cover}</p>
+            <p className="text-[15px] text-[#31302e]">{listing.description}</p>
+            {listing.fixtures?.length > 0 && <ul className="flex flex-wrap gap-2 text-[13px]">{listing.fixtures.map(f => <li key={f} className="rounded-full bg-[#f6f5f4] px-3 py-1">{f}</li>)}</ul>}
+            {!ownerView && <Button layoutId={`msg-${listing.id}`} onClick={() => setThreading(true)}>Message {ROLES[listing.owner].short}</Button>}
+          </Card>
+        </div>
+      </div>
+      {listing.mode === "rent" && ((!ownerView && role === "tunde") || (ownerView && role === "ada")) && <><HandoverMarketplace role={ownerView ? "amara" : role} listingId={listing.id} />{!ownerView && <TenantHandover listingId={listing.id} />}</>}
+      {ownerView && <Card className="p-5 grid gap-4"><h2 className="font-display text-[22px]">Messages</h2><Thread listing={listing} role="ada" onBack={() => go({ name: "landlord", role: "ada" })} /></Card>}
+      {ownerView && <Tray open={editing} onClose={() => setEditing(false)} title="Edit listing"><form onSubmit={saveEdit} className="grid gap-4"><Field label="Price (₦)"><input type="number" min="1" inputMode="numeric" required className={inputCls} value={editPrice} onChange={e => setEditPrice(e.target.value)} /></Field><Field label="Description"><textarea rows={4} className={inputCls} value={editDescription} onChange={e => setEditDescription(e.target.value)} /></Field><Field label="Replace photo (max 900 KB)"><input type="file" accept="image/*" onChange={onPhoto} className="block max-w-full min-h-[44px] text-sm" /></Field>{editError && <p role="alert" className="text-[14px] text-[#793400]">{editError}</p>}{editImage && <img src={editImage} alt="Listing preview" className="h-36 w-full rounded-xl object-cover" />}<div className="flex flex-wrap gap-2"><Button type="submit">Save changes</Button><Button type="button" variant="secondary" onClick={() => setEditing(false)}>Cancel</Button></div></form></Tray>}
+      <Tray open={threading} onClose={() => setThreading(false)} title={`Message ${ROLES[listing.owner].short}`} layoutId={`msg-${listing.id}`}><Thread listing={listing} role={role} onBack={() => setThreading(false)} /></Tray>
+    </div>
+  );
 }
 export default Detail;
