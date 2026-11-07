@@ -75,7 +75,7 @@ impl Contract {
     pub fn ft_on_transfer(&mut self, sender_id: AccountId, amount: U128, msg: String) -> U128 {
         assert_eq!(env::predecessor_account_id(), self.allowed_token, "Invalid token");
         let agreement_id: u64 = msg.parse().expect("Invalid agreement ID");
-        let mut agreement = self.agreements.get(&agreement_id).expect("Agreement not found");
+        let mut agreement = self.agreements.get(&agreement_id).expect("Agreement not found").clone();
         assert_eq!(agreement.status, "listed", "Agreement not listed");
         assert!(!agreement.is_disputed, "Agreement is disputed");
         agreement.renter = Some(sender_id.clone()); agreement.funded_amount += amount.0;
@@ -84,7 +84,7 @@ impl Contract {
     }
 
     pub fn confirm_move_in(&mut self, id: u64) {
-        let mut agreement = self.agreements.get(&id).expect("Agreement not found");
+        let mut agreement = self.agreements.get(&id).expect("Agreement not found").clone();
         assert_eq!(Some(env::predecessor_account_id()), agreement.renter, "Only renter can confirm");
         assert_eq!(agreement.status, "funded", "Must be funded");
         assert!(!agreement.is_disputed, "Agreement is disputed");
@@ -92,21 +92,21 @@ impl Contract {
     }
 
     pub fn confirm_handover(&mut self, id: u64) {
-        let mut agreement = self.agreements.get(&id).expect("Agreement not found");
+        let mut agreement = self.agreements.get(&id).expect("Agreement not found").clone();
         assert_eq!(env::predecessor_account_id(), agreement.landlord, "Only landlord can confirm handover");
         assert!(matches!(agreement.agreement_type, AgreementType::Sale), "Only for sales");
         agreement.seller_handover_confirmed = true; self.check_sale_completion(&mut agreement);
     }
 
     pub fn confirm_receipt(&mut self, id: u64) {
-        let mut agreement = self.agreements.get(&id).expect("Agreement not found");
+        let mut agreement = self.agreements.get(&id).expect("Agreement not found").clone();
         assert_eq!(Some(env::predecessor_account_id()), agreement.renter, "Only renter/buyer can confirm receipt");
         assert!(matches!(agreement.agreement_type, AgreementType::Sale), "Only for sales");
         agreement.buyer_receipt_confirmed = true; self.check_sale_completion(&mut agreement);
     }
 
     pub fn auto_release(&mut self, id: u64) {
-        let mut agreement = self.agreements.get(&id).expect("Agreement not found");
+        let mut agreement = self.agreements.get(&id).expect("Agreement not found").clone();
         assert_eq!(agreement.status, "funded", "Must be funded");
         assert!(!agreement.is_disputed, "Agreement is disputed");
         let now = env::block_timestamp(); let deadline = agreement.move_in_time_ns + agreement.dispute_window_ns;
@@ -114,7 +114,7 @@ impl Contract {
     }
 
     pub fn open_dispute(&mut self, id: u64, reason: String) {
-        let mut agreement = self.agreements.get(&id).expect("Agreement not found");
+        let mut agreement = self.agreements.get(&id).expect("Agreement not found").clone();
         let caller = env::predecessor_account_id();
         assert!(caller == agreement.landlord || Some(caller) == agreement.renter, "Only parties can dispute");
         agreement.is_disputed = true; agreement.dispute_reason = Some(reason);
@@ -123,7 +123,7 @@ impl Contract {
 
     pub fn resolve_dispute(&mut self, id: u64, award_to_landlord: bool) {
         assert_eq!(env::predecessor_account_id(), self.arbitrator, "Only arbitrator can resolve");
-        let mut agreement = self.agreements.get(&id).expect("Agreement not found");
+        let mut agreement = self.agreements.get(&id).expect("Agreement not found").clone();
         assert!(agreement.is_disputed, "Agreement is not disputed");
         if award_to_landlord {
             self.release_funds(&mut agreement);
@@ -141,7 +141,7 @@ impl Contract {
 
     pub fn rate_landlord(&mut self, id: u64, stars: u8) {
         assert!(stars > 0 && stars <= 5, "Stars must be 1-5");
-        let agreement = self.agreements.get(&id).expect("Agreement not found");
+        let agreement = self.agreements.get(&id).expect("Agreement not found").clone();
         assert_eq!(Some(env::predecessor_account_id()), agreement.renter, "Only renter can rate");
         assert_eq!(agreement.status, "released", "Can only rate after release");
         let mut ratings = self.landlord_ratings.get(&agreement.landlord).unwrap_or_default();
