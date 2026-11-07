@@ -18,4 +18,4 @@ The UI uses illustrative NGN rent amounts and testnet wNEAR for escrow. Tokens o
 
 ## Security/demo notes
 
-Deploy only to testnet after verifying the specific FT contract and decimals. Configure an explicit allowlisted FT and a disclosed demo arbitrator. The demo arbitrator resolution sends all remaining escrow to one party; this is not independent adjudication. Add sandbox tests for NEP-141 transfer callbacks and promise failures before any deployment.
+Deploy only to testnet after verifying the specific FT contract and decimals. Configure an explicit allowlisted FT and a disclosed demo arbitrator. The demo arbitrator resolution sends all remaining escrow to one party; this is not independent adjudication. Add sandbox tests for NEP-141 transfer callbacks and promise failures before any deployments.
