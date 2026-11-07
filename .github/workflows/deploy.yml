@@ -1,0 +1,43 @@
+name: Deploy Contract
+
+on:
+  workflow_dispatch: # This lets you run it manually by clicking a button
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32-unknown-unknown
+          override: true
+
+      - name: Install near-cli (JS)
+        run: npm install -g near-cli
+
+      - name: Build Contract
+        run: |
+          cd contract
+          cargo build --release --target wasm32-unknown-unknown
+          cd ..
+
+      - name: Create Credentials
+        run: |
+          mkdir -p ~/.near-credentials/testnet
+          cat <<EOF > ~/.near-credentials/testnet/jayisagod.testnet.json
+          {"account_id": "jayisagod.testnet", "private_key": "${{ secrets.NEAR_PRIVATE_KEY }}"}
+          EOF
+
+      - name: Deploy to Testnet
+        run: |
+          near deploy hearthold-escrow.testnet ./contract/target/wasm32-unknown-unknown/release/hearthold_contract.wasm \
+            with-init-call new \
+            json-args '{"allowed_token": "ft.hearthold-jay.testnet", "arbitrator": "hearthold-arbitrator.testnet"}' \
+            prepaid-gas '100.0 Tgas' \
+            attached-deposit '0 NEAR' \
+            networkId testnet
