@@ -36,6 +36,7 @@ jobs:
       - name: Deploy to Testnet
         run: |
           near deploy hearthold-escrow.testnet ./contract/target/wasm32-unknown-unknown/release/hearthold_contract.wasm \
+            --accountId jayisagod.testnet \
             --initFunction new \
             --initArgs '{"allowed_token": "ft.hearthold-jay.testnet", "arbitrator": "hearthold-arbitrator.testnet"}' \
             --initGas 100000000000000 \
