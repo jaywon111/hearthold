@@ -1,7 +1,7 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::U128;
 use near_sdk::store::{LookupMap, UnorderedMap};
-use near_sdk::{env, near_bindgen, AccountId, NearToken, PanicOnDefault, Promise, Gas};
+use near_sdk::{env, near, AccountId, NearToken, PanicOnDefault, Promise, Gas};
 use near_sdk::serde::{Deserialize, Serialize};
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Serialize, Deserialize)]
@@ -29,15 +29,15 @@ pub struct AgreementView {
     pub buyer_receipt_confirmed: bool,
 }
 
-#[near_bindgen]
-#[derive(PanicOnDefault, BorshDeserialize, BorshSerialize)]
+#[near(contract_state)]
+#[derive(PanicOnDefault)]
 pub struct Contract {
     pub allowed_token: AccountId, pub arbitrator: AccountId,
     pub agreements: UnorderedMap<u64, Agreement>, pub next_id: u64,
     pub landlord_ratings: LookupMap<AccountId, Vec<u8>>,
 }
 
-#[near_bindgen]
+#[near]
 impl Contract {
     #[init]
     pub fn new(allowed_token: AccountId, arbitrator: AccountId) -> Self {
@@ -144,12 +144,16 @@ impl Contract {
         let agreement = self.agreements.get(&id).expect("Agreement not found").clone();
         assert_eq!(Some(env::predecessor_account_id()), agreement.renter, "Only renter can rate");
         assert_eq!(agreement.status, "released", "Can only rate after release");
-        let mut ratings = self.landlord_ratings.get(&agreement.landlord).unwrap_or_default();
-        ratings.push(stars); self.landlord_ratings.insert(agreement.landlord.clone(), ratings);
+        
+        // FIX: Added .cloned() so we get an owned Vec<u8> instead of a reference
+        let mut ratings = self.landlord_ratings.get(&agreement.landlord).cloned().unwrap_or_default();
+        ratings.push(stars); 
+        self.landlord_ratings.insert(agreement.landlord.clone(), ratings);
     }
 
     pub fn get_landlord_rating(&self, landlord: AccountId) -> Option<f64> {
-        let ratings = self.landlord_ratings.get(&landlord)?; if ratings.is_empty() { return None; }
+        let ratings = self.landlord_ratings.get(&landlord)?; 
+        if ratings.is_empty() { return None; }
         Some((ratings.iter().map(|&r| r as u32).sum::<u32>() as f64) / (ratings.len() as f64))
     }
 
