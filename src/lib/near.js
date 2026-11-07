@@ -9,7 +9,6 @@ import { setupSender } from "@near-wallet-selector/sender";
 
 if (!globalThis.Buffer) globalThis.Buffer = Buffer;
 
-// UPDATED to point to your newly deployed contract
 export const CONTRACT_ID = import.meta.env.VITE_CONTRACT_ID || "hearthold-escrow.testnet";
 export const TOKEN_ID = "ft.hearthold-jay.testnet";
 export const RPC = "https://rpc.testnet.near.org";
@@ -66,7 +65,15 @@ export async function getArbitrator() {
   return await view("get_arbitrator");
 }
 
-// UPDATED to match new contract signature
+function readReturn(outcome) {
+  for (const candidate of [outcome?.status?.SuccessValue, outcome?.transaction_outcome?.outcome?.status?.SuccessValue, outcome?.transaction?.status?.SuccessValue]) {
+    if (candidate) {
+      try { return new TextDecoder().decode(Uint8Array.from(atob(candidate), c => c.charCodeAt(0))).replace(/^\"|\"$/g, ""); } catch { }
+    }
+  }
+  return "";
+}
+
 export async function listProperty({ amount, moveInTimeNs, disputeWindowNs, agreementType = "Rent" }) {
   const result = await change("list_property", {
     amount: String(amount),
@@ -74,7 +81,8 @@ export async function listProperty({ amount, moveInTimeNs, disputeWindowNs, agre
     dispute_window_ns: Number(disputeWindowNs),
     agreement_type_str: agreementType
   });
-  return result;
+  const id = readReturn(result);
+  return { result, agreementId: id };
 }
 
 export async function depositToken(tokenAmount, agreementId) {
@@ -99,24 +107,4 @@ export async function transferHethToSeller(amount, sellerAccount) {
     receiverId: TOKEN_ID,
     actions: [{ type: "FunctionCall", params: { methodName: "ft_transfer_call", args: { receiver_id: sellerAccount, amount: String(amount), msg: "" }, gas: "100000000000000", deposit: "1" } }],
   });
-}
-
-function readReturn(outcome) {
-  for (const candidate of [outcome?.status?.SuccessValue, outcome?.transaction_outcome?.outcome?.status?.SuccessValue, outcome?.transaction?.status?.SuccessValue]) {
-    if (candidate) {
-      try { return new TextDecoder().decode(Uint8Array.from(atob(candidate), c => c.charCodeAt(0))).replace(/^\"|\"$/g, ""); } catch { }
-    }
-  }
-  return "";
-}
-
-export async function listProperty({ amount, moveInTimeNs, disputeWindowNs, agreementType = "Rent" }) {
-  const result = await change("list_property", {
-    amount: String(amount),
-    move_in_time_ns: Number(moveInTimeNs),
-    dispute_window_ns: Number(disputeWindowNs),
-    agreement_type_str: agreementType
-  });
-  const id = readReturn(result);
-  return { result, agreementId: id };
 }
