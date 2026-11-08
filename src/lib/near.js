@@ -50,15 +50,10 @@ export async function view(methodName, args = {}) {
 export async function change(methodName, args = {}, deposit = "0") {
   const selector = await getSelector();
   const wallet = await selector.wallet();
-  
-  // Grab the ID directly from the active UI state to prevent Meteor from dropping it
   const signerId = selector.store.getState().accounts[0]?.accountId;
 
-  if (!signerId) {
-    throw new Error("Session lost. Please click the power icon to log out and log back in.");
-  }
+  if (!signerId) throw new Error("Session lost. Please click the power icon to log out and log back in.");
 
-  // Use signAndSendTransactions (plural array) - this bypasses the mobile webview bug
   const result = await wallet.signAndSendTransactions({
     transactions: [{
       signerId: signerId,
@@ -91,8 +86,8 @@ function readReturn(outcome) {
 export async function listProperty({ amount, moveInTimeNs, disputeWindowNs, agreementType = "Rent" }) {
   const result = await change("list_property", {
     amount: String(amount),
-    move_in_time_ns: Number(moveInTimeNs),
-    dispute_window_ns: Number(disputeWindowNs),
+    move_in_time_ns: String(moveInTimeNs),     // FIX: Send as String to prevent float precision loss
+    dispute_window_ns: String(disputeWindowNs), // FIX: Send as String
     agreement_type_str: agreementType
   });
   const id = readReturn(result);
