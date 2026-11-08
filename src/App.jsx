@@ -13,6 +13,7 @@ import HeroLightform from "./components/HeroLightform.jsx";
 const ROLE_KEY = "hearthold:role";
 const ROLE_FOR_ROUTE = { landlord: "ada", explore: "tunde", handover: "amara", detail: "tunde", owner: "ada" };
 const ROUTE_FOR_ROLE = { ada: "landlord", tunde: "explore", amara: "handover" };
+
 function routeFromPath(path) {
   if (path === "/" || path === "/home") return { name: "home" };
   if (path === "/explore") return { name: "explore" };
@@ -22,7 +23,12 @@ function routeFromPath(path) {
   if (path.startsWith("/owner/")) return { name: "owner", id: decodeURIComponent(path.slice(7)) };
   return { name: "home" };
 }
-function pathForRoute(route) { return route.name === "detail" || route.name === "owner" ? `/${route.name === "detail" ? "listing" : "owner"}/${encodeURIComponent(route.id || "")}` : ({ home: "/", explore: "/explore", landlord: "/landlord", handover: "/handover" })[route.name] || "/"; }
+
+function pathForRoute(route) { 
+  return route.name === "detail" || route.name === "owner" 
+    ? `/${route.name === "detail" ? "listing" : "owner"}/${encodeURIComponent(route.id || "")}` 
+    : ({ home: "/", explore: "/explore", landlord: "/landlord", handover: "/handover" })[route.name] || "/"; 
+}
 
 function Home({ go }) {
   const store = useStore();
@@ -47,11 +53,14 @@ function Home({ go }) {
     <section className="grid gap-4 md:grid-cols-3">{[["Explore",`${store.listings.length} seeded listings`,`Homes, land and shops with photos across three cities.`],["Escrow","NEAR testnet","Buyers hold the price, sellers see a status timeline."],["Safety","Scam wording flagged","Suspicious payment requests show a warning in chat."]].map(([t,k,b])=><Card key={t} className="p-5 grid gap-2"><Eyebrow>{t}</Eyebrow><p className="font-display text-[22px]">{k}</p><p className="text-[15px] text-[#31302e]">{b}</p></Card>)}</section>
   </div>;
 }
+
 function Nav({route,go,role,onRoleChange,onReset}) {
  const tabs=[["explore","Explore"],["landlord","Landlord"],["handover","Handover"]];
  return <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-[#e6e6e6]"><div className="mx-auto max-w-6xl px-4 md:px-6 py-3 flex items-center gap-4 flex-wrap"><button onClick={()=>go({name:"home"})} className="font-display text-[22px] font-semibold tracking-tight rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0075de]">Hearthold</button><nav aria-label="Main" className="flex gap-1 flex-wrap">{tabs.map(([name,label])=><button key={name} onClick={()=>go({name})} aria-current={route.name===name?"page":undefined} className="relative min-h-[40px] px-3 rounded-full text-[14px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0075de]">{route.name===name&&<motion.span layoutId="nav-pill" transition={spring} className="absolute inset-0 rounded-full bg-[#f6f5f4]"/>}<span className="relative">{label}</span></button>)}</nav><div className="ml-auto flex items-center gap-2 flex-wrap max-[640px]:w-full max-[640px]:justify-end"><label className="sr-only" htmlFor="role">Signed in as</label><select id="role" value={role} onChange={e=>onRoleChange(e.target.value)} className="min-h-[40px] rounded-full border border-[#ddd] bg-white px-3 text-[14px]">{Object.values(ROLES).map(r=><option key={r.id} value={r.id}>{r.name}</option>)}</select><WalletControls/><button onClick={onReset} className="min-h-[40px] px-3 rounded-full text-[13px] text-[#615d59] hover:bg-[#f6f5f4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0075de]">Reset demo data</button></div></div></header>;
 }
+
 export default function App() { return <BrowserRouter><AppRoutes/></BrowserRouter>; }
+
 function AppRoutes() {
  const location=useLocation(),navigate=useNavigate();const [route,setRoute]=useState(()=>routeFromPath(location.pathname));const [role,setRoleState]=useState(()=>{const saved=localStorage.getItem(ROLE_KEY);return ROUTE_FOR_ROLE[saved]?saved:"tunde";});const [dir,setDir]=useState(1);const order=["home","explore","detail","landlord","handover"];
  useEffect(()=>{const next=routeFromPath(location.pathname);setDir(order.indexOf(next.name)>=order.indexOf(route.name)?1:-1);setRoute(next);const r=ROLE_FOR_ROUTE[next.name];if(r&&localStorage.getItem(ROLE_KEY)!==r){localStorage.setItem(ROLE_KEY,r);setRoleState(r);}},[location.pathname]);
@@ -61,4 +70,56 @@ function AppRoutes() {
  const reset=()=>{if(!window.confirm("Reset all demo data to the seeded version?"))return;resetData();localStorage.setItem(ROLE_KEY,"tunde");setRoleState("tunde");navigate("/explore");};
  return <MotionConfig reducedMotion="user"><div className="min-h-screen overflow-x-hidden bg-[#f6f5f4] text-black font-body"><Nav route={route} go={go} role={role} onRoleChange={onRoleChange} onReset={reset}/><main className="mx-auto max-w-6xl px-4 md:px-6 py-8 md:py-12"><LayoutGroup><AnimatePresence mode="wait" custom={dir}><motion.div className="min-w-0" key={route.name+(route.id||"")} custom={dir} initial={{opacity:0,x:dir*24}} animate={{opacity:1,x:0}} exit={{opacity:0,x:dir*-24}} transition={spring}>{route.name==="home"&&<Home go={go}/ >}{route.name==="explore"&&<Explore go={go} role={role}/ >}{route.name==="detail"&&<Detail id={route.id} role={role} go={go}/ >}{route.name==="owner"&&<Detail id={route.id} role="ada" go={go} ownerView/>}{route.name==="landlord"&&<Landlord go={go}/ >}{route.name==="handover"&&<Handover role={role}/ >}</motion.div></AnimatePresence></LayoutGroup></main><footer className="mx-auto max-w-6xl px-4 md:px-6 pb-10 text-[13px] text-[#615d59]">Hearthold keeps listings, messages and handovers in this browser. Escrow actions and status are read from NEAR testnet.</footer></div></MotionConfig>;
 }
-function WalletControls() {const [account,setAccount]=useState("");useEffect(()=>{let sub;getSelector().then(s=>{const update=()=>setAccount(s.store.getState().accounts[0]?.accountId||"");update();sub=s.store.observable.subscribe(update);}).catch(()=>{});return()=>sub?.unsubscribe?.();},[]);return <button onClick={()=>showWalletModal()} className="min-h-[40px] rounded-full border border-[#10261c] bg-[#10261c] px-2 sm:px-4 text-[11px] sm:text-[13px] font-medium shadow-none text-[#f6f5f4] hover:bg-[#1d3a2c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0075de] whitespace-nowrap">{account||"Connect NEAR testnet wallet"}</button>;}
+
+function WalletControls() {
+  const [account, setAccount] = useState("");
+  const [selector, setSelector] = useState(null);
+
+  useEffect(() => {
+    let sub;
+    getSelector().then(s => {
+      setSelector(s);
+      const update = () => setAccount(s.store.getState().accounts[0]?.accountId || "");
+      update();
+      sub = s.store.observable.subscribe(update);
+    }).catch(() => {});
+    return () => sub?.unsubscribe?.();
+  }, []);
+
+  const handleDisconnect = async () => {
+    if (!selector) return;
+    try {
+      const wallet = await selector.wallet();
+      await wallet.signOut();
+      setAccount("");
+    } catch (e) {
+      console.error("Failed to disconnect", e);
+    }
+  };
+
+  if (account) {
+    return (
+      <div className="flex items-center gap-1 bg-[#10261c] rounded-full pr-1 pl-3 py-1 text-[#f6f5f4]">
+        <span className="text-[11px] sm:text-[13px] font-medium max-w-[100px] sm:max-w-[150px] truncate" title={account}>
+          {account}
+        </span>
+        <button 
+          onClick={handleDisconnect} 
+          className="ml-1 rounded-full p-1.5 hover:bg-white/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0075de]" 
+          title="Disconnect wallet"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button 
+      onClick={() => showWalletModal()} 
+      className="min-h-[40px] rounded-full border border-[#10261c] bg-[#10261c] px-2 sm:px-4 text-[11px] sm:text-[13px] font-medium shadow-none text-[#f6f5f4] hover:bg-[#1d3a2c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0075de] whitespace-nowrap"
+    >
+      Connect NEAR testnet wallet
+    </button>
+  );
+}
