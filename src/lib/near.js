@@ -6,7 +6,6 @@ import { setupMyNearWallet } from "@near-wallet-selector/my-near-wallet";
 import { setupHereWallet } from "@near-wallet-selector/here-wallet";
 import { setupMeteorWallet } from "@near-wallet-selector/meteor-wallet";
 import { setupSender } from "@near-wallet-selector/sender";
-import { connect, keyStores, KeyPair, transactions } from "near-api-js";
 
 if (!globalThis.Buffer) globalThis.Buffer = Buffer;
 
@@ -51,19 +50,24 @@ export async function view(methodName, args = {}) {
 export async function change(methodName, args = {}, deposit = "0") {
   const selector = await getSelector();
   const wallet = await selector.wallet();
-  const accounts = await wallet.getAccounts();
+  
+  // Grab the ID directly from the active UI state to prevent Meteor from dropping it
+  const signerId = selector.store.getState().accounts[0]?.accountId;
 
-  if (!accounts || accounts.length === 0) {
-    throw new Error("Wallet session expired. Please click the power icon (top right) to disconnect, then reconnect.");
+  if (!signerId) {
+    throw new Error("Session lost. Please click the power icon to log out and log back in.");
   }
 
-  const signerId = accounts[0].accountId;
-
-  return wallet.signAndSendTransaction({
-    signerId: signerId,
-    receiverId: CONTRACT_ID,
-    actions: [{ type: "FunctionCall", params: { methodName, args, gas: "100000000000000", deposit } }]
+  // Use signAndSendTransactions (plural array) - this bypasses the mobile webview bug
+  const result = await wallet.signAndSendTransactions({
+    transactions: [{
+      signerId: signerId,
+      receiverId: CONTRACT_ID,
+      actions: [{ type: "FunctionCall", params: { methodName, args, gas: "100000000000000", deposit } }]
+    }]
   });
+
+  return result[0];
 }
 
 export async function getConnectedAccount() {
@@ -98,14 +102,19 @@ export async function listProperty({ amount, moveInTimeNs, disputeWindowNs, agre
 export async function depositToken(tokenAmount, agreementId) {
   const selector = await getSelector();
   const wallet = await selector.wallet();
-  const accounts = await wallet.getAccounts();
-  if (!accounts || accounts.length === 0) throw new Error("Wallet session expired. Please reconnect.");
+  const signerId = selector.store.getState().accounts[0]?.accountId;
 
-  return wallet.signAndSendTransaction({
-    signerId: accounts[0].accountId,
-    receiverId: TOKEN_ID,
-    actions: [{ type: "FunctionCall", params: { methodName: "ft_transfer_call", args: { receiver_id: CONTRACT_ID, amount: String(tokenAmount), msg: String(agreementId) }, gas: "100000000000000", deposit: "1" } }]
+  if (!signerId) throw new Error("Session lost. Please log out and log back in.");
+
+  const result = await wallet.signAndSendTransactions({
+    transactions: [{
+      signerId: signerId,
+      receiverId: TOKEN_ID,
+      actions: [{ type: "FunctionCall", params: { methodName: "ft_transfer_call", args: { receiver_id: CONTRACT_ID, amount: String(tokenAmount), msg: String(agreementId) }, gas: "100000000000000", deposit: "1" } }]
+    }]
   });
+
+  return result[0];
 }
 
 export async function rateLandlord(agreementId, stars) {
@@ -118,12 +127,17 @@ export async function transferHethToSeller(amount, sellerAccount) {
   
   const selector = await getSelector();
   const wallet = await selector.wallet();
-  const accounts = await wallet.getAccounts();
-  if (!accounts || accounts.length === 0) throw new Error("Wallet session expired. Please reconnect.");
+  const signerId = selector.store.getState().accounts[0]?.accountId;
+
+  if (!signerId) throw new Error("Session lost. Please log out and log back in.");
   
-  return wallet.signAndSendTransaction({
-    signerId: accounts[0].accountId,
-    receiverId: TOKEN_ID,
-    actions: [{ type: "FunctionCall", params: { methodName: "ft_transfer_call", args: { receiver_id: sellerAccount, amount: String(amount), msg: "" }, gas: "100000000000000", deposit: "1" } }],
+  const result = await wallet.signAndSendTransactions({
+    transactions: [{
+      signerId: signerId,
+      receiverId: TOKEN_ID,
+      actions: [{ type: "FunctionCall", params: { methodName: "ft_transfer_call", args: { receiver_id: sellerAccount, amount: String(amount), msg: "" }, gas: "100000000000000", deposit: "1" } }]
+    }]
   });
+
+  return result[0];
 }
