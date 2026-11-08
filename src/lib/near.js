@@ -49,8 +49,10 @@ export async function view(methodName, args = {}) {
 
 export async function change(methodName, args = {}, deposit = "0") {
   const selector = await getSelector();
-  if (!selector.store.getState().accounts[0]) throw new Error("Connect your NEAR testnet wallet first.");
+  const accounts = selector.store.getState().accounts;
+  if (!accounts[0]) throw new Error("Connect your NEAR testnet wallet first.");
   return (await selector.wallet()).signAndSendTransaction({
+    signerId: accounts[0].accountId, // FIX: Explicitly tell the wallet who is signing
     receiverId: CONTRACT_ID,
     actions: [{ type: "FunctionCall", params: { methodName, args, gas: "100000000000000", deposit } }]
   });
@@ -87,8 +89,10 @@ export async function listProperty({ amount, moveInTimeNs, disputeWindowNs, agre
 
 export async function depositToken(tokenAmount, agreementId) {
   const selector = await getSelector();
-  if (!selector.store.getState().accounts[0]) throw new Error("Connect your NEAR testnet wallet first.");
+  const accounts = selector.store.getState().accounts;
+  if (!accounts[0]) throw new Error("Connect your NEAR testnet wallet first.");
   return (await selector.wallet()).signAndSendTransaction({
+    signerId: accounts[0].accountId, // FIX
     receiverId: TOKEN_ID,
     actions: [{ type: "FunctionCall", params: { methodName: "ft_transfer_call", args: { receiver_id: CONTRACT_ID, amount: String(tokenAmount), msg: String(agreementId) }, gas: "100000000000000", deposit: "1" } }]
   });
@@ -101,9 +105,13 @@ export async function rateLandlord(agreementId, stars) {
 export async function transferHethToSeller(amount, sellerAccount) {
   if (!sellerAccount || !sellerAccount.endsWith(".testnet")) throw new Error("Seller testnet account is missing or invalid.");
   if (!/^\d+$/.test(String(amount)) || BigInt(amount) <= 0n) throw new Error("HETH amount must be positive base units.");
+  
   const selector = await getSelector();
-  if (!selector.store.getState().accounts[0]) throw new Error("Connect your NEAR testnet wallet first.");
+  const accounts = selector.store.getState().accounts;
+  if (!accounts[0]) throw new Error("Connect your NEAR testnet wallet first.");
+  
   return (await selector.wallet()).signAndSendTransaction({
+    signerId: accounts[0].accountId, // FIX
     receiverId: TOKEN_ID,
     actions: [{ type: "FunctionCall", params: { methodName: "ft_transfer_call", args: { receiver_id: sellerAccount, amount: String(amount), msg: "" }, gas: "100000000000000", deposit: "1" } }],
   });
