@@ -47,12 +47,25 @@ export async function view(methodName, args = {}) {
   return JSON.parse(Buffer.from(payload.result.result).toString("utf8"));
 }
 
+// Helper to robustly find the active account
+async function getSignerId(selector, wallet) {
+  let accounts = await wallet.getAccounts();
+  if (!accounts || accounts.length === 0) {
+    accounts = selector.store.getState().accounts;
+  }
+  if (!accounts || accounts.length === 0 || !accounts[0].accountId) {
+    throw new Error("Wallet connected, but account missing. Please click the power icon (top right) to disconnect, then reconnect.");
+  }
+  return accounts[0].accountId;
+}
+
 export async function change(methodName, args = {}, deposit = "0") {
   const selector = await getSelector();
-  const accounts = selector.store.getState().accounts;
-  if (!accounts[0]) throw new Error("Connect your NEAR testnet wallet first.");
-  return (await selector.wallet()).signAndSendTransaction({
-    signerId: accounts[0].accountId, // FIX: Explicitly tell the wallet who is signing
+  const wallet = await selector.wallet();
+  const signerId = await getSignerId(selector, wallet);
+
+  return wallet.signAndSendTransaction({
+    signerId,
     receiverId: CONTRACT_ID,
     actions: [{ type: "FunctionCall", params: { methodName, args, gas: "100000000000000", deposit } }]
   });
@@ -89,10 +102,11 @@ export async function listProperty({ amount, moveInTimeNs, disputeWindowNs, agre
 
 export async function depositToken(tokenAmount, agreementId) {
   const selector = await getSelector();
-  const accounts = selector.store.getState().accounts;
-  if (!accounts[0]) throw new Error("Connect your NEAR testnet wallet first.");
-  return (await selector.wallet()).signAndSendTransaction({
-    signerId: accounts[0].accountId, // FIX
+  const wallet = await selector.wallet();
+  const signerId = await getSignerId(selector, wallet);
+
+  return wallet.signAndSendTransaction({
+    signerId,
     receiverId: TOKEN_ID,
     actions: [{ type: "FunctionCall", params: { methodName: "ft_transfer_call", args: { receiver_id: CONTRACT_ID, amount: String(tokenAmount), msg: String(agreementId) }, gas: "100000000000000", deposit: "1" } }]
   });
@@ -107,11 +121,11 @@ export async function transferHethToSeller(amount, sellerAccount) {
   if (!/^\d+$/.test(String(amount)) || BigInt(amount) <= 0n) throw new Error("HETH amount must be positive base units.");
   
   const selector = await getSelector();
-  const accounts = selector.store.getState().accounts;
-  if (!accounts[0]) throw new Error("Connect your NEAR testnet wallet first.");
+  const wallet = await selector.wallet();
+  const signerId = await getSignerId(selector, wallet);
   
-  return (await selector.wallet()).signAndSendTransaction({
-    signerId: accounts[0].accountId, // FIX
+  return wallet.signAndSendTransaction({
+    signerId,
     receiverId: TOKEN_ID,
     actions: [{ type: "FunctionCall", params: { methodName: "ft_transfer_call", args: { receiver_id: sellerAccount, amount: String(amount), msg: "" }, gas: "100000000000000", deposit: "1" } }],
   });
