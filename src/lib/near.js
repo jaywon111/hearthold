@@ -47,14 +47,11 @@ export async function view(methodName, args = {}) {
   return JSON.parse(Buffer.from(payload.result.result).toString("utf8"));
 }
 
-// Helper to robustly find the active account
-async function getSignerId(selector, wallet) {
-  let accounts = await wallet.getAccounts();
-  if (!accounts || accounts.length === 0) {
-    accounts = selector.store.getState().accounts;
-  }
+// Helper to always get a valid signer ID from the app state
+function getSignerIdFromState(selector) {
+  const accounts = selector.store.getState().accounts;
   if (!accounts || accounts.length === 0 || !accounts[0].accountId) {
-    throw new Error("Wallet connected, but account missing. Please click the power icon (top right) to disconnect, then reconnect.");
+    throw new Error("Wallet session expired. Please click the power icon (top right) to disconnect, then reconnect.");
   }
   return accounts[0].accountId;
 }
@@ -62,10 +59,10 @@ async function getSignerId(selector, wallet) {
 export async function change(methodName, args = {}, deposit = "0") {
   const selector = await getSelector();
   const wallet = await selector.wallet();
-  const signerId = await getSignerId(selector, wallet);
+  const signerId = getSignerIdFromState(selector);
 
   return wallet.signAndSendTransaction({
-    signerId,
+    signerId: signerId, // Explicitly passed here
     receiverId: CONTRACT_ID,
     actions: [{ type: "FunctionCall", params: { methodName, args, gas: "100000000000000", deposit } }]
   });
@@ -103,10 +100,10 @@ export async function listProperty({ amount, moveInTimeNs, disputeWindowNs, agre
 export async function depositToken(tokenAmount, agreementId) {
   const selector = await getSelector();
   const wallet = await selector.wallet();
-  const signerId = await getSignerId(selector, wallet);
+  const signerId = getSignerIdFromState(selector);
 
   return wallet.signAndSendTransaction({
-    signerId,
+    signerId: signerId,
     receiverId: TOKEN_ID,
     actions: [{ type: "FunctionCall", params: { methodName: "ft_transfer_call", args: { receiver_id: CONTRACT_ID, amount: String(tokenAmount), msg: String(agreementId) }, gas: "100000000000000", deposit: "1" } }]
   });
@@ -122,10 +119,10 @@ export async function transferHethToSeller(amount, sellerAccount) {
   
   const selector = await getSelector();
   const wallet = await selector.wallet();
-  const signerId = await getSignerId(selector, wallet);
+  const signerId = getSignerIdFromState(selector);
   
   return wallet.signAndSendTransaction({
-    signerId,
+    signerId: signerId,
     receiverId: TOKEN_ID,
     actions: [{ type: "FunctionCall", params: { methodName: "ft_transfer_call", args: { receiver_id: sellerAccount, amount: String(amount), msg: "" }, gas: "100000000000000", deposit: "1" } }],
   });
