@@ -5,12 +5,20 @@ import { ROLES, newId, update, useStore, FLAGGED_DEMO } from "../lib/store.js";
 import { Button, Card, Eyebrow, Field, Naira, SectionTitle, Simulated, TYPES, MODES, CITIES, inputCls, fmtAgo } from "./ui.jsx";
 import { listProperty, CONTRACT_ID, TOKEN_ID } from "../lib/near.js";
 
-const blank = { title: "", type: "house", mode: "rent", price: "", city: "Lagos", area: "", description: "", video: "", image: "", moveIn: "", disputeHours: 72, hethAmount: "1" };
+const blank = { title: "", type: "house", mode: "rent", price: "", city: "Lagos", area: "", description: "", video: "", image: "", moveIn: "", disputeHours: 72, hethAmount: "0" };
 
 function NewListing({ onCreated }) {
   const [form, setForm] = useState(blank), [error, setError] = useState(""), [saved, setSaved] = useState(false), [busy, setBusy] = useState(false), [wallet, setWallet] = useState("");
+  
   const set = k => e => setForm({ ...form, [k]: e.target.value });
   
+  // Auto-convert NGN to HETH. Rate: 1,000,000 NGN = 1 HETH
+  const handlePriceChange = (e) => {
+    const raw = e.target.value.replace(/\D/g, "");
+    const convertedHeth = raw ? (Number(raw) / 1000000).toFixed(4).replace(/\.?0+$/, "") : "";
+    setForm({ ...form, price: raw, hethAmount: convertedHeth || "0" });
+  };
+
   const onFile = e => {
     const f = e.target.files?.[0]; if (!f) return;
     if (!f.type.startsWith("image/")) return setError("Choose an image file.");
@@ -27,8 +35,8 @@ function NewListing({ onCreated }) {
     setError(""); setBusy(true);
     
     try {
-      // Calculate arguments for the new contract
-      const amountInHeth = BigInt(Number(form.hethAmount) || 1) * 10n ** 24n;
+      // Use the auto-calculated HETH amount
+      const amountInHeth = BigInt(Math.round(Number(form.hethAmount) * 10000)) * 10n ** 20n; // Converts to 24 decimals
       const moveInTimeNs = BigInt(new Date(form.moveIn).getTime()) * 1000000n;
       const disputeWindowNs = BigInt(Number(form.disputeHours || 72)) * 3600n * 1000000000n;
 
@@ -73,13 +81,22 @@ function NewListing({ onCreated }) {
         <div className="md:col-span-2"><Field label="Listing title"><input className={inputCls} value={form.title} onChange={set("title")} placeholder="e.g. 2-bedroom flat, Yaba" /></Field></div>
         <Field label="Kind"><select className={inputCls} value={form.type} onChange={set("type")}>{Object.entries(TYPES).map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select></Field>
         <Field label="Rent or sale"><select className={inputCls} value={form.mode} onChange={set("mode")}>{Object.entries(MODES).map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select></Field>
-        <Field label="Price (NGN label)"><input inputMode="numeric" className={inputCls} value={form.price} onChange={e => setForm({ ...form, price: e.target.value.replace(/\D/g, "") })} placeholder="e.g. 250000" /></Field>
-        <Field label="Escrow Amount (HETH)"><input type="number" min="0.01" step="0.01" className={inputCls} value={form.hethAmount} onChange={set("hethAmount")} placeholder="e.g. 1.5" /></Field>
+        
+        <Field label="Price (NGN label)">
+          <input inputMode="numeric" className={inputCls} value={form.price} onChange={handlePriceChange} placeholder="e.g. 3000000" />
+        </Field>
+        
+        <Field label="Escrow Amount (HETH)">
+          <div className="relative">
+            <input type="text" readOnly disabled className={`${inputCls} bg-gray-100 cursor-not-allowed opacity-70`} value={form.hethAmount} />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-[#615d59]">Auto-calculated</span>
+          </div>
+        </Field>
+
         <Field label="City"><select className={inputCls} value={form.city} onChange={set("city")}>{CITIES.map(c => <option key={c}>{c}</option>)}</select></Field>
         <div className="md:col-span-2"><Field label="Area"><input className={inputCls} value={form.area} onChange={set("area")} placeholder="e.g. Yaba" /></Field></div>
         <div className="md:col-span-2"><Field label="Description"><textarea rows={3} className={inputCls} value={form.description} onChange={set("description")} /></Field></div>
         
-        {/* Move-in and Dispute windows are now required for ALL listings, not just sales */}
         <Field label="Move-in date"><input type="datetime-local" className={inputCls} value={form.moveIn || ""} onChange={set("moveIn")} /></Field>
         <Field label="Dispute window (hours)"><input type="number" min="1" className={inputCls} value={form.disputeHours || 72} onChange={set("disputeHours")} /></Field>
 
