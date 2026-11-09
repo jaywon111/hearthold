@@ -86,10 +86,10 @@ function readReturn(outcome) {
 export async function listProperty({ amount, moveInTimeNs, disputeWindowNs, agreementType = "Rent" }) {
   const result = await change("list_property", {
     amount: String(amount), 
-    move_in_time_ns: Number(moveInTimeNs),      
-    dispute_window_ns: Number(disputeWindowNs), 
+    move_in_time_ns: Number(moveInTimeNs), 
+    dispute_window_ns: Number(disputeWindowNs),
     agreement_type_str: agreementType
-  }, "100000000000000000000000");
+  }, "100000000000000000000000"); 
   
   const id = readReturn(result);
   return { result, agreementId: id };
