@@ -60,12 +60,13 @@ impl Contract {
     }
 
     #[payable]
-    pub fn list_property(&mut self, amount: u128, move_in_time_ns: u64, dispute_window_ns: u64, agreement_type_str: String) -> u64 {
+    pub fn list_property(&mut self, amount: U128, move_in_time_ns: u64, dispute_window_ns: u64, agreement_type_str: String) -> u64 {
         let id = self.next_id; self.next_id += 1;
         let agreement_type = if agreement_type_str.to_lowercase() == "sale" { AgreementType::Sale } else { AgreementType::Rent };
         let agreement = Agreement {
             id, landlord: env::predecessor_account_id(), renter: None, token: self.allowed_token.clone(),
-            amount, move_in_time_ns, dispute_window_ns, status: "listed".to_string(), funded_amount: 0,
+            amount: amount.0, // <--- THE FIX: Extracts the raw u128 from the U128 wrapper
+            move_in_time_ns, dispute_window_ns, status: "listed".to_string(), funded_amount: 0,
             is_disputed: false, dispute_reason: None, agreement_type, seller_handover_confirmed: false, buyer_receipt_confirmed: false,
         };
         self.agreements.insert(id, agreement); id
@@ -145,7 +146,6 @@ impl Contract {
         assert_eq!(Some(env::predecessor_account_id()), agreement.renter, "Only renter can rate");
         assert_eq!(agreement.status, "released", "Can only rate after release");
         
-        // FIX: Added .cloned() so we get an owned Vec<u8> instead of a reference
         let mut ratings = self.landlord_ratings.get(&agreement.landlord).cloned().unwrap_or_default();
         ratings.push(stars); 
         self.landlord_ratings.insert(agreement.landlord.clone(), ratings);
