@@ -29,7 +29,10 @@ jobs:
       - name: Create Credentials
         run: |
           mkdir -p ~/.near-credentials/testnet
+          # Write the escrow key (needed for deploy)
           echo '{"account_id": "hearthold-escrow.testnet", "private_key": "${{ secrets.NEAR_PRIVATE_KEY }}"}' > ~/.near-credentials/testnet/hearthold-escrow.testnet.json
+          # Write the deployer key (needed for account creation)
+          echo '{"account_id": "jayisagod.testnet", "private_key": "${{ secrets.JAYISAGOD_KEY }}"}' > ~/.near-credentials/testnet/jayisagod.testnet.json
 
       - name: Delete and Recreate Contract Account
         run: |
