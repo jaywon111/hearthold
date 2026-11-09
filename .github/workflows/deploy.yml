@@ -31,6 +31,13 @@ jobs:
           mkdir -p ~/.near-credentials/testnet
           echo '{"account_id": "hearthold-escrow.testnet", "private_key": "${{ secrets.NEAR_PRIVATE_KEY }}"}' > ~/.near-credentials/testnet/hearthold-escrow.testnet.json
 
+      - name: Delete and Recreate Contract Account
+        run: |
+          echo "Deleting existing contract account to clear corrupted state..."
+          near delete hearthold-escrow.testnet jayisagod.testnet --force --networkId testnet || true
+          echo "Recreating contract account..."
+          near create-account hearthold-escrow.testnet --masterAccount jayisagod.testnet --initialBalance 5 --networkId testnet
+
       - name: Deploy to Testnet
         run: |
           near deploy hearthold-escrow.testnet ./contract/target/wasm32-unknown-unknown/release/hearthold_contract.wasm \
@@ -38,5 +45,4 @@ jobs:
             --initArgs '{"allowed_token": "ft.hearthold-jay.testnet", "arbitrator": "hearthold-arbitrator.testnet"}' \
             --initGas 100000000000000 \
             --initDeposit 0 \
-            --force \
             --networkId testnet
