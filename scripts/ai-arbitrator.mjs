@@ -11,7 +11,6 @@ const ARBITRATOR_KEY = process.env.ARBITRATOR_PRIVATE_KEY;
 async function getAIDecision(agreement) {
   console.log(`🤖 Asking Gemini AI to judge dispute...`);
   
-  // Build a rich prompt using the on-chain data (just like your Python example)
   const moveInDate = new Date(Number(agreement.move_in_time_ns) / 1000000).toISOString();
   const amountHeth = (BigInt(agreement.amount) / 10n ** 24n).toString();
   
@@ -31,7 +30,8 @@ async function getAIDecision(agreement) {
     Be objective. Weigh the provided dispute reason against the move-in date.
   `;
 
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`, {
+  // UPDATED: Using v1beta endpoint and gemini-2.5-flash model
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -39,8 +39,8 @@ async function getAIDecision(agreement) {
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
-        temperature: 0.0, // Lock creativity out
-        responseMimeType: "application/json", 
+        temperature: 0.0,
+        responseMimeType: "application/json",
         responseSchema: {
           type: "OBJECT",
           properties: {
@@ -61,7 +61,6 @@ async function getAIDecision(agreement) {
     throw new Error("Failed to get a valid AI response.");
   }
 
-  // Parse the guaranteed JSON response
   const jsonText = data.candidates[0].content.parts[0].text;
   const decisionObj = JSON.parse(jsonText);
   
