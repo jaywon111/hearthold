@@ -8,23 +8,48 @@ const ARBITRATOR_ACCOUNT = "hearthold-arbitrator.testnet";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const ARBITRATOR_KEY = process.env.ARBITRATOR_PRIVATE_KEY;
 
-async function getAIDecision(reason) {
-  console.log(`🤖 Asking Gemini AI to judge dispute: "${reason}"`);
+async function getAIDecision(agreement) {
+  console.log(`🤖 Asking Gemini AI to judge dispute...`);
   
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+  // Build a rich prompt using the on-chain data (just like your Python example)
+  const moveInDate = new Date(Number(agreement.move_in_time_ns) / 1000000).toISOString();
+  const amountHeth = (BigInt(agreement.amount) / 10n ** 24n).toString();
+  
+  const prompt = `
+    You are an objective AI arbitrator for a real estate rental platform called Hearthold.
+    Your job is to decide who receives the frozen escrow funds: the renter or the landlord.
+    
+    [SMART CONTRACT DATA]
+    Agreement ID: ${agreement.id}
+    Escrow Amount: ${amountHeth} HETH
+    Scheduled Move-in Date: ${moveInDate}
+    Dispute Reason provided by user: "${agreement.dispute_reason}"
+    
+    [RULES]
+    If the dispute reason indicates the landlord failed to provide the property, refund the renter.
+    If the dispute reason indicates the renter is trying to scam or squat, award the landlord.
+    Be objective. Weigh the provided dispute reason against the move-in date.
+  `;
+
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      contents: [{
-        parts: [{
-          text: `You are a neutral real estate arbitrator. Read the tenant's dispute reason. Reply with EXACTLY ONE WORD: 'landlord' if the landlord should keep the money, or 'renter' if the tenant should be refunded.\n\nDispute: ${reason}`
-        }]
-      }],
+      contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
-        temperature: 0.1,
-        maxOutputTokens: 10
+        temperature: 0.0, // Lock creativity out
+        responseMimeType: "application/json", 
+        responseSchema: {
+          type: "OBJECT",
+          properties: {
+            winner: { type: "STRING", enum: ["renter", "landlord"] },
+            reasoning: { type: "STRING" },
+            confidence_score: { type: "NUMBER" }
+          },
+          required: ["winner", "reasoning", "confidence_score"]
+        }
       }
     })
   });
@@ -36,9 +61,15 @@ async function getAIDecision(reason) {
     throw new Error("Failed to get a valid AI response.");
   }
 
-  const decision = data.candidates[0].content.parts[0].text.trim().toLowerCase();
-  console.log(`⚖️ AI Ruled in favor of: ${decision}`);
-  return decision;
+  // Parse the guaranteed JSON response
+  const jsonText = data.candidates[0].content.parts[0].text;
+  const decisionObj = JSON.parse(jsonText);
+  
+  console.log(`⚖️ AI RULED FOR: ${decisionObj.winner.toUpperCase()}`);
+  console.log(`🧠 REASONING: ${decisionObj.reasoning}`);
+  console.log(`📊 CONFIDENCE: ${decisionObj.confidence_score * 100}%`);
+  
+  return decisionObj.winner;
 }
 
 async function main() {
@@ -76,8 +107,8 @@ async function main() {
     if (agreement && agreement.status === "disputed" && agreement.is_disputed) {
       console.log(`🚨 Found disputed agreement #${i}: ${agreement.dispute_reason}`);
       
-      const decision = await getAIDecision(agreement.dispute_reason);
-      const awardLandlord = decision.includes("landlord");
+      const winner = await getAIDecision(agreement);
+      const awardLandlord = winner === "landlord";
 
       console.log(`Submitting resolution on-chain (award_to_landlord: ${awardLandlord})...`);
       
