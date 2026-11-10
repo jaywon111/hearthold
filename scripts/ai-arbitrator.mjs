@@ -8,11 +8,9 @@ const ARBITRATOR_ACCOUNT = "hearthold-arbitrator.testnet";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const ARBITRATOR_KEY = process.env.ARBITRATOR_PRIVATE_KEY;
 
-// List of models to try in order if one is busy
 const MODELS = [
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite",
-  "gemini-3-flash-preview"
+  "gemini-3.8-flash",   // Latest stable flagship
+  "gemini-3.6-flash",   // Fallback if 3.8 is busy
 ];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -39,11 +37,11 @@ async function getAIDecision(agreement) {
     Be objective. Weigh the provided dispute reason against the move-in date.
   `;
 
-  // Try each model with retries
   for (const model of MODELS) {
     console.log(`   -> Trying model: ${model}`);
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
+        // UPDATED: Using the v1beta endpoint with the gemini-3.8-flash model
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -70,15 +68,13 @@ async function getAIDecision(agreement) {
         if (data.error) {
           if (data.error.code === 503) {
             console.log(`      ⚠️ Model ${model} is busy. Retrying in ${attempt * 2}s...`);
-            await sleep(attempt * 2000); // Exponential backoff
-            continue; // Try again
+            await sleep(attempt * 2000);
+            continue;
           }
-          // If it's a different error (like 404), log it and break to try the next model
           console.error(`      ❌ Error with ${model}:`, JSON.stringify(data.error, null, 2));
           break; 
         }
 
-        // Success!
         const jsonText = data.candidates[0].content.parts[0].text;
         const decisionObj = JSON.parse(jsonText);
         
@@ -100,7 +96,6 @@ async function getAIDecision(agreement) {
 }
 
 async function main() {
-  // ... (The rest of your main function remains exactly the same)
   if (!GEMINI_API_KEY || !ARBITRATOR_KEY) {
     throw new Error("Missing API keys in environment variables.");
   }
