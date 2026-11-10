@@ -1,0 +1,27 @@
+name: AI Arbitrator Keeper
+
+on:
+  schedule:
+    - cron: '*/5 * * * *' # Runs every 5 minutes
+  workflow_dispatch: # Lets you trigger it manually
+
+jobs:
+  check-disputes:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install near-api-js dotenv
+
+      - name: Run AI Arbitrator
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          ARBITRATOR_PRIVATE_KEY: ${{ secrets.ARBITRATOR_PRIVATE_KEY }}
+        run: node scripts/ai-arbitrator.mjs
