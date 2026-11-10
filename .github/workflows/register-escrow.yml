@@ -1,0 +1,23 @@
+name: Register Escrow to HETH
+
+on:
+  workflow_dispatch:
+
+jobs:
+  register:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install near-cli (JS)
+        run: npm install -g near-cli
+
+      - name: Create Credentials
+        run: |
+          mkdir -p ~/.near-credentials/testnet
+          echo '{"account_id": "jayisagod.testnet", "private_key": "${{ secrets.JAYISAGOD_KEY }}"}' > ~/.near-credentials/testnet/jayisagod.testnet.json
+
+      - name: Register Escrow
+        run: |
+          near call ft.hearthold-jay.testnet storage_deposit '{"account_id": "hearthold-escrow.testnet"}' --accountId jayisagod.testnet --deposit 0.1 --networkId testnet
