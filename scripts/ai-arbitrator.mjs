@@ -5,43 +5,47 @@ dotenv.config();
 
 const CONTRACT_ID = "hearthold-escrow.testnet";
 const ARBITRATOR_ACCOUNT = "hearthold-arbitrator.testnet";
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const ARBITRATOR_KEY = process.env.ARBITRATOR_PRIVATE_KEY;
 
 async function getAIDecision(reason) {
-  console.log(`🤖 Asking AI to judge dispute: "${reason}"`);
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+  console.log(`🤖 Asking Gemini AI to judge dispute: "${reason}"`);
+  
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${GROQ_API_KEY}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: "llama3-70b-8192",
-      messages: [
-        { 
-          role: "system", 
-          content: "You are a neutral real estate arbitrator. Read the tenant's dispute reason. Reply with EXACTLY ONE WORD: 'landlord' if the landlord should keep the money, or 'renter' if the tenant should be refunded." 
-        },
-        { role: "user", content: reason }
-      ],
-      temperature: 0.1,
-      max_tokens: 10
+      contents: [{
+        parts: [{
+          text: `You are a neutral real estate arbitrator. Read the tenant's dispute reason. Reply with EXACTLY ONE WORD: 'landlord' if the landlord should keep the money, or 'renter' if the tenant should be refunded.\n\nDispute: ${reason}`
+        }]
+      }],
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 10
+      }
     })
   });
 
   const data = await response.json();
-  const decision = data.choices[0].message.content.trim().toLowerCase();
+
+  if (data.error) {
+    console.error("❌ Gemini API Error:", JSON.stringify(data, null, 2));
+    throw new Error("Failed to get a valid AI response.");
+  }
+
+  const decision = data.candidates[0].content.parts[0].text.trim().toLowerCase();
   console.log(`⚖️ AI Ruled in favor of: ${decision}`);
   return decision;
 }
 
 async function main() {
-  if (!GROQ_API_KEY || !ARBITRATOR_KEY) {
+  if (!GEMINI_API_KEY || !ARBITRATOR_KEY) {
     throw new Error("Missing API keys in environment variables.");
   }
 
-  // Setup NEAR connection
   const keyStore = new keyStores.InMemoryKeyStore();
   const keyPair = KeyPair.fromString(ARBITRATOR_KEY);
   await keyStore.setKey("testnet", ARBITRATOR_ACCOUNT, keyPair);
@@ -54,7 +58,6 @@ async function main() {
 
   const account = await near.account(ARBITRATOR_ACCOUNT);
 
-  // Get all agreements
   const count = await account.viewFunction({
     contractId: CONTRACT_ID,
     methodName: "get_agreement_count",
@@ -89,7 +92,7 @@ async function main() {
       console.log(`✅ Agreement #${i} resolved!`);
     }
   }
-  console.log("Scan complete. No more disputes pending.");
+  console.log("Scan complete.");
 }
 
 main().catch(console.error);
