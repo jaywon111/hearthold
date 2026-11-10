@@ -46,12 +46,9 @@ export function Thread({ listing, role, onBack }) {
   return <div className="grid gap-4"><div className="flex min-w-0 items-center gap-3"><Button variant="ghost" onClick={onBack} className="shrink-0">← Back</Button><p className="min-w-0 font-semibold truncate">{listing.title}</p></div><Card className="min-w-0 p-4 grid gap-3 max-h-[50vh] overflow-y-auto">{msgs.length === 0 && <p className="text-[#615d59]">No messages yet. Say hello to start the thread.</p>}{msgs.map(m => { const mine = m.from === role; return <motion.div key={m.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={spring} className={`flex ${mine ? "justify-end" : "justify-start"}`}><div className={`min-w-0 w-fit max-w-[85%] break-words [overflow-wrap:anywhere] rounded-2xl px-4 py-2.5 text-[15px] ${mine ? "bg-[#0075de] text-white" : "bg-[#f6f5f4] text-black"}`}><p className="break-words [overflow-wrap:anywhere]">{m.text}</p>{m.flagged?.length > 0 && <p className="mt-1 text-[12px] font-semibold break-words [overflow-wrap:anywhere]">Flagged: {m.flagged.join(", ")}</p>}<p className={`mt-1 text-[11px] ${mine ? "text-white/85" : "text-[#615d59]"}`}>{ROLES[m.from]?.short || "Demo user"} · {fmtAgo(m.at)}</p></div></motion.div>; })}</Card><FraudBanner hits={hits} /><form onSubmit={e => { e.preventDefault(); send(draft); }} className="grid gap-3"><label htmlFor="draft" className="sr-only">Message</label><textarea id="draft" value={draft} onChange={e => setDraft(e.target.value)} rows={3} placeholder={`Message ${ROLES[other].short}`} className={`${inputCls} min-w-0 w-full max-w-full`} /><div className="flex flex-wrap gap-3 justify-between">{role === listing.owner && <Button variant="secondary" type="button" onClick={() => send(FLAGGED_DEMO)}>Send flagged demo message</Button>}<Button type="submit" disabled={!draft.trim()}>Send message</Button></div></form></div>;
 }
 
-const parseHeth = value => { const text = String(value).trim(); if (!/^\d+(\.\d{0,24})?$/.test(text)) return null; const [units, decimals = ""] = text.split("."); return BigInt(units) * 10n ** 24n + BigInt((decimals + "0".repeat(24)).slice(0, 24)); };
-
 function EscrowPanel({ listing, ownerView = false }) {
   const cachedId = String(listing.agreementId || localStorage.getItem(`hearthold:agreement:${listing.id}`) || "");
   const [agreementId, setAgreementId] = useState(cachedId);
-  const [amount, setAmount] = useState("");
   const [state, setState] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -95,8 +92,9 @@ function EscrowPanel({ listing, ownerView = false }) {
   const run = async (fn) => { setBusy(true); setError(""); try { await fn(); await refresh(); } catch (e) { setError(e.message || "NEAR testnet transaction failed."); } finally { setBusy(false); } };
   const connect = async () => { const selector = await showWalletModal(); await new Promise(resolve => { const unsub = selector.store.observable.subscribe(s => { if (s.accounts[0]?.accountId) { unsub.unsubscribe(); resolve(); } }); setTimeout(() => { unsub.unsubscribe(); resolve(); }, 90000) }); setAccount(await getConnectedAccount()); };
 
-  const whole = state?.funded_amount ? BigInt(state.funded_amount) / 10n ** 24n : 0n; 
-  const parsedAmount = parseHeth(amount); const validAmount = parsedAmount !== null && parsedAmount > 0n;
+  // Calculate display amount based on the state stored on-chain
+  const displayHeth = state?.amount ? (BigInt(state.amount) / 10n ** 24n).toString() : "0";
+
   const moveIn = state ? Number(state.move_in_time_ns) / 1e6 : 0; 
   const deadline = state?.dispute_window_ns ? moveIn + Number(state.dispute_window_ns) / 1e6 : 0; 
   const remaining = Math.max(0, deadline - now);
@@ -109,13 +107,13 @@ function EscrowPanel({ listing, ownerView = false }) {
   return (
     <Card className="min-w-0 p-5 md:p-7 grid gap-5 border-[#d9ded9] bg-[#fffefa]">
       <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div><Eyebrow>NEAR testnet escrow</Eyebrow><p className="mt-2 font-display text-[24px] leading-tight">Fund this listing</p></div>
+        <div><Eyebrow>NEAR testnet escrow</Eyebrow><p className="mt-2 font-display text-[24px] leading-tight">Hearthold Escrow</p></div>
         <span className="rounded-full bg-[#e5f1ea] px-3 py-1.5 text-xs text-[#244b38]">Testnet. HETH moves on-chain, no real money.</span>
       </div>
       <p className="text-sm text-[#615d59] break-all">Escrow {CONTRACT_ID} · HETH {TOKEN_ID}</p>
       
       {!account ? (
-        <div className="grid gap-3"><p className="text-sm">Connect a NEAR testnet wallet to fund this listing.</p><Button onClick={connect}>Connect wallet</Button></div>
+        <div className="grid gap-3"><p className="text-sm">Connect a NEAR testnet wallet to interact with this escrow.</p><Button onClick={connect}>Connect wallet</Button></div>
       ) : (
         <>
           <p className="text-sm break-all">Connected: <b>{account}</b></p>
@@ -128,16 +126,19 @@ function EscrowPanel({ listing, ownerView = false }) {
             </div>
           )}
 
-          {/* FUNDING STATE */}
+          {/* FUNDING STATE - UPDATED TO SHOW FIXED AMOUNT */}
           {state?.status === "listed" && !isLandlord && (
-            <div className="grid gap-3">
-              <label className="grid gap-1 text-sm">Funding amount (HETH)<span className="text-xs text-[#615d59]">Enter the HETH amount to send.</span>
-                <input aria-label="Funding amount in HETH" value={amount} onChange={e => setAmount(e.target.value)} inputMode="decimal" placeholder="e.g. 1.25 HETH" className={inputCls} />
-              </label>
-              <Button disabled={busy || !validAmount} onClick={() => run(() => depositToken(parsedAmount.toString(), agreementId))}>{busy ? "Waiting for wallet…" : "Fund escrow"}</Button>
+            <div className="grid gap-4 bg-[#f6f5f4] p-4 rounded-xl border border-[#e6e6e6]">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-[#31302e]">Required Deposit</span>
+                <span className="font-display text-[24px] font-bold text-[#0075de]">{displayHeth} HETH</span>
+              </div>
+              <Button disabled={busy} onClick={() => run(() => depositToken(state.amount, agreementId))}>
+                {busy ? "Waiting for wallet…" : "Fund escrow"}
+              </Button>
             </div>
           )}
-          {state?.status === "listed" && isLandlord && <p className="text-sm text-[#615d59]">You are the landlord on this agreement.</p>}
+          {state?.status === "listed" && isLandlord && <p className="text-sm text-[#615d59]">You are the landlord on this agreement. Waiting for the renter to fund it.</p>}
 
           {/* RENT FLOW */}
           {state && state.status === "funded" && state.agreement_type === "Rent" && !state.is_disputed && (
@@ -180,7 +181,7 @@ function EscrowPanel({ listing, ownerView = false }) {
                   <Button variant="secondary" disabled={busy} onClick={() => run(() => change("resolve_dispute", { id: Number(agreementId), award_to_landlord: false }))}>Resolve to renter</Button>
                 </div>
               ) : (
-                <p className="text-sm text-red-700">Waiting for the arbitrator ({arbitrator}) to resolve.</p>
+                <p className="text-sm text-red-700">Waiting for the AI Arbitrator ({arbitrator}) to resolve.</p>
               )}
             </div>
           )}
