@@ -1,0 +1,48 @@
+--- Run 2b contract extension (DRAFT, not applied — blocked on Rust toolchain) ---
+--- File: hearthold/contract/src/lib.rs (near-sdk 5.30, borsh). Insert points below.
+--- Run: cargo test (requires installing Rust stable + wasm32 target first)
+
+@@ 1. TYPE PROLOG: emisors for receipts/events. Add: use near_sdk::env; already uses env::panic_str.
+--- Add struct after Status enum:
++#[derive(BorshDeserialize, BorshSerialize, Clone, Copy, PartialEq, Debug)]
++pub enum AgreementMode { Rent, Sale }
+--- Agreement gains: mode: AgreementMode, title: String, rating_total: u64, rating_count: u64
+
+@@ 2. LIST: new signature (keep rent path; add sale path):
++    pub fn list_property_sale(&mut self, token: AccountId, price_ngn: U128, description: String, handover_at: u64) -> u64 {
++        assert_eq!(token, self.allowed_token, "token not allowlisted");
++        assert!(price_ngn.0 > 0, "price must be positive");
++        assert!(!description.trim().is_empty(), "title/description required");
++        assert!(handover_at > env::block_timestamp(), "handover must be in the future");
++        // same body as list_property with status Listed, mode Sale, single installment due at handover_at
++        self.next_id += 1;
++        self.agreements.insert(&self.next_id, &Agreement { landlord: env::predecessor_account_id(), renter: None, token, rent_ngn: price_ngn.0, description, move_in_at: handover_at, dispute_window_ns: 24*60*60*1_000_000_000, status: Status::Listed, funded: 0, installments: vec![], next_id: 0, mode: AgreementMode::Sale, rating_total: 0, rating_count: 0 });
++        self.next_id
++    }
+
+@@ 3. RECEIPT: emit on every release/transfer (NEP-297 event, searchable by indexers):
++    fn emit_receipt(&self, id: u64, a: &Agreement, event: &str, amount: u128) {
++        env::log_str(&format!("{{\"standard\":\"hearthold-receipt\",\"version\":\"1.0\",\"event\":\"{}\",\"agreement_id\":{},\"landlord\":\"{}\",\"renter\":\"{}\",\"amount\":\"{}\"}}",
++            event, id, a.landlord, a.renter.clone().unwrap_or_default(), amount));
++    }
+--- call emit_receipt("funded") in ft_on_transfer, emit_receipt("released") in release_due, emit_receipt("resolved") in resolve_dispute.
+
+@@ 4. LANDLORD RATINGS: counterparty-rated only, one per released agreement (renter rates landlord):
++    pub fn rate_landlord(&mut self, id: u64, stars: u8) {
++        let mut a = self.load(id);
++        assert_eq!(a.status, Status::Released, "agreement not settled");
++        assert_eq!(a.renter, Some(env::predecessor_account_id()), "renter only");
++        assert!((1..=5).contains(&stars), "rating must be 1-5");
++        a.rating_total += stars as u64; a.rating_count += 1;
++        self.agreements.insert(&id, &a);
++    }
++    pub fn get_landlord_rating(&self, landlord: AccountId) -> (u64, u64) { (self.rating_total.get(&landlord).copied().unwrap_or(0), self.rating_count.get(&landlord).copied().unwrap_or(0)) }
+--- (requires adding two LookupMaps + default fields on Agreement; agreement-view gains mode + avg rating)
+
+@@ 5. PANIC / SANDBOX TESTS (append to #[cfg(test)] mod tests):
+--- #[test] fn rejects_double_funding...   (already covered: ft_on_transfer after Funded returns amount)
+--- #[test] fn rejects_schedule_after_funding... (set_schedule after Listed only — add)
+--- #[test] fn rejects_wrong_token_and_zero_amount... (ft_on_transfer with other token returns full amount — add)
+--- #[test] fn panics_on_nonexistent_agreement... (get_agreement(999) panics — add via catch_unwind)
+--- #[test] fn em_297 receipt contains agreement_id... (vm context log capture — add when near-sdk testing lists logs)
+--- requires: cd contract && cargo test (Rust not installed in this sandbox)
