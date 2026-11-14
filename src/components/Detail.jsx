@@ -3,7 +3,7 @@ import { change, CONTRACT_ID, depositToken, getConnectedAccount, getArbitrator, 
 import * as THREE from "three";
 import { AnimatePresence, motion } from "framer-motion";
 import { ROLES, detectFraud, newId, update, useStore, FLAGGED_DEMO } from "../lib/store.js";
-import { Button, Card, Empty, Eyebrow, Field, Naira, Simulated, Tray, TYPES, MODES, fmtAgo, fmtDate, inputCls, money, spring, soft } from "./ui.jsx";
+import { Button, Card, Empty, Eyebrow, Field, Naira, Simulated, Tray, TYPES, MODES, fmtAgo, inputCls, spring, soft } from "./ui.jsx";
 import { TenantHandover } from "./Handover.jsx";
 import HandoverMarketplace from "./HandoverMarketplace.jsx";
 
@@ -69,32 +69,23 @@ function EscrowPanel({ listing, ownerView = false }) {
     try {
       const value = await view("get_agreement", { id: Number(id) });
       persistAgreement(value); setAgreementId(String(value.id));
-    } catch (e) { setError(e.message || "Could not read agreement from NEAR testnet."); }
+    } catch (e) { 
+      setError("Could not read agreement. It may not exist."); 
+      persistAgreement(null); 
+    }
   };
   
-  const discover = async () => {
-    setError("");
-    try {
-      const count = Number(await view("get_agreement_count"));
-      for (let id = count; id > 0; id--) {
-        const value = await view("get_agreement", { id });
-        if (value && value.landlord && value.id) {
-          setAgreementId(String(id)); persistAgreement(value); return;
-        }
-      }
-      persistAgreement(null); setAgreementId(""); setError("No onchain agreement is linked to this listing yet.");
-    } catch (e) { setError(e.message || "Could not check NEAR testnet agreement status."); }
-  };
+  useEffect(() => { 
+    if (cachedId) refresh(cachedId); 
+    else setError("No onchain agreement is linked to this listing in your browser.");
+  }, [listing.id]);
 
-  useEffect(() => { if (cachedId) refresh(cachedId); else discover(); }, [listing.id]);
   useEffect(() => { if (!agreementId || agreementId === "0") return; const timer = setInterval(() => refresh(agreementId), 10000); return () => clearInterval(timer); }, [agreementId]);
 
   const run = async (fn) => { setBusy(true); setError(""); try { await fn(); await refresh(); } catch (e) { setError(e.message || "NEAR testnet transaction failed."); } finally { setBusy(false); } };
   const connect = async () => { const selector = await showWalletModal(); await new Promise(resolve => { const unsub = selector.store.observable.subscribe(s => { if (s.accounts[0]?.accountId) { unsub.unsubscribe(); resolve(); } }); setTimeout(() => { unsub.unsubscribe(); resolve(); }, 90000) }); setAccount(await getConnectedAccount()); };
 
-  // Calculate display amount based on the state stored on-chain
   const displayHeth = state?.amount ? (BigInt(state.amount) / 10n ** 24n).toString() : "0";
-
   const moveIn = state ? Number(state.move_in_time_ns) / 1e6 : 0; 
   const deadline = state?.dispute_window_ns ? moveIn + Number(state.dispute_window_ns) / 1e6 : 0; 
   const remaining = Math.max(0, deadline - now);
@@ -126,7 +117,6 @@ function EscrowPanel({ listing, ownerView = false }) {
             </div>
           )}
 
-          {/* FUNDING STATE - UPDATED TO SHOW FIXED AMOUNT */}
           {state?.status === "listed" && !isLandlord && (
             <div className="grid gap-4 bg-[#f6f5f4] p-4 rounded-xl border border-[#e6e6e6]">
               <div className="flex items-center justify-between">
@@ -140,7 +130,6 @@ function EscrowPanel({ listing, ownerView = false }) {
           )}
           {state?.status === "listed" && isLandlord && <p className="text-sm text-[#615d59]">You are the landlord on this agreement. Waiting for the renter to fund it.</p>}
 
-          {/* RENT FLOW */}
           {state && state.status === "funded" && state.agreement_type === "Rent" && !state.is_disputed && (
             <>
               <p className="text-sm">Move-in is confirmed by the connected renter. If no dispute is opened before the dispute window ends, anyone can trigger the automatic release.</p>
@@ -152,7 +141,6 @@ function EscrowPanel({ listing, ownerView = false }) {
             </>
           )}
 
-          {/* SALE FLOW */}
           {state && state.status === "funded" && state.agreement_type === "Sale" && !state.is_disputed && (
             <>
               <p className="text-sm">For sales, the landlord confirms handover of documents/keys, and the buyer confirms receipt. Funds release when both are done.</p>
@@ -163,7 +151,6 @@ function EscrowPanel({ listing, ownerView = false }) {
             </>
           )}
 
-          {/* DISPUTE CONTROLS */}
           {state && state.status === "funded" && !state.is_disputed && (isRenter || isLandlord) && (
              <div className="flex gap-2 flex-wrap mt-2">
                 <input aria-label="Dispute reason" value={reason} onChange={e => setReason(e.target.value)} placeholder="Dispute reason" className={`${inputCls} min-w-0 flex-1`} />
@@ -171,7 +158,6 @@ function EscrowPanel({ listing, ownerView = false }) {
              </div>
           )}
 
-          {/* DISPUTED STATE / ARBITRATOR */}
           {state && state.is_disputed && (
             <div className="grid gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
               <p className="text-sm font-semibold text-red-800">Escrow is frozen due to dispute: "{state.dispute_reason}"</p>
@@ -186,7 +172,6 @@ function EscrowPanel({ listing, ownerView = false }) {
             </div>
           )}
 
-          {/* RELEASED / RATING */}
           {state && state.status === "released" && (
             <div className="grid gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
               <p className="text-sm font-semibold text-green-800">Escrow released. This agreement is complete.</p>
@@ -208,7 +193,6 @@ function EscrowPanel({ listing, ownerView = false }) {
           {error && <p role="alert" className="text-sm text-red-700 break-words">{error}</p>}
           <div className="flex gap-2 flex-wrap">
             <Button variant="ghost" onClick={() => refresh()} disabled={!agreementId || busy}>Refresh onchain status</Button>
-            {!agreementId && <Button variant="secondary" disabled={busy} onClick={discover}>{busy ? "Checking chain…" : "Check agreement"}</Button>}
           </div>
         </>
       )}
@@ -218,12 +202,17 @@ function EscrowPanel({ listing, ownerView = false }) {
 
 function Detail({ id, role, go, ownerView = false }) {
   const store = useStore(); const listing = store.listings.find(l => l.id === id); const [threading, setThreading] = useState(false), [editing, setEditing] = useState(false), [editPrice, setEditPrice] = useState(""), [editDescription, setEditDescription] = useState(""), [editImage, setEditImage] = useState(""), [editError, setEditError] = useState("");
-  if (!listing) return <Empty title="This listing is gone" body="It may have been removed in a reset." action={() => go({ name: "explore" })} actionLabel="Back to Explore" />; if (ownerView && listing.owner !== "ada") return <Empty title="Owner view unavailable" body="Only the listing owner can manage this property." action={() => go({ name: "explore" })} actionLabel="Back to Explore" />;
-  const cover = `${listing.area}, ${listing.city}`; const startEdit = () => { setEditPrice(String(listing.price)); setEditDescription(listing.description || ""); setEditImage(listing.image || ""); setEditing(true) }; const saveEdit = e => { e.preventDefault(); if (!Number(editPrice) || Number(editPrice) <= 0) return setEditError("Enter a price in naira."); setEditError(""); update(s => { const item = s.listings.find(x => x.id === id); if (item) { item.price = Number(editPrice); item.description = editDescription; item.image = editImage; item.photos = [editImage, ...(item.photos || []).slice(1)]; } return s; }); setEditing(false) }; const onPhoto = e => { const file = e.target.files?.[0]; if (!file) return; if (!file.type.startsWith("image/")) return setEditError("Choose an image file."); if (file.size > 900 * 1024) return setEditError("Keep the photo under 900 KB so it fits in local storage."); setEditError(""); const reader = new FileReader(); reader.onload = () => setEditImage(reader.result); reader.readAsDataURL(file) };
+  
+  if (!listing) return <Empty title="This listing is gone" body="It may have been removed in a reset." action={() => go({ name: "explore" })} actionLabel="Back to Explore" />; 
+  if (ownerView && listing.owner !== "ada") return <Empty title="Owner view unavailable" body="Only the listing owner can manage this property." action={() => go({ name: "explore" })} actionLabel="Back to Explore" />;
+  
+  const cover = `${listing.area}, ${listing.city}`; 
+  const startEdit = () => { setEditPrice(String(listing.price)); setEditDescription(listing.description || ""); setEditImage(listing.image || ""); setEditing(true) }; 
+  const saveEdit = e => { e.preventDefault(); if (!Number(editPrice) || Number(editPrice) <= 0) return setEditError("Enter a price in naira."); setEditError(""); update(s => { const item = s.listings.find(x => x.id === id); if (item) { item.price = Number(editPrice); item.description = editDescription; item.image = editImage; item.photos = [editImage, ...(item.photos || []).slice(1)]; } return s; }); setEditing(false) }; 
+  const onPhoto = e => { const file = e.target.files?.[0]; if (!file) return; if (!file.type.startsWith("image/")) return setEditError("Choose an image file."); if (file.size > 900 * 1024) return setEditError("Keep the photo under 900 KB so it fits in local storage."); setEditError(""); const reader = new FileReader(); reader.onload = () => setEditImage(reader.result); reader.readAsDataURL(file) };
   
   return (
     <div className="grid min-w-0 gap-8">
-      {/* ESCROW PANEL NOW SHOWS FOR BOTH RENT AND SALE */}
       {((!ownerView && role === "tunde") || (ownerView && role === "ada")) && <EscrowPanel listing={listing} ownerView={ownerView} />}
       
       <div className="grid min-w-0 gap-6 grid-cols-1 lg:grid-cols-[1.1fr_1fr] items-start">
@@ -249,10 +238,24 @@ function Detail({ id, role, go, ownerView = false }) {
           </Card>
         </div>
       </div>
-      {listing.mode === "rent" && ((!ownerView && role === "tunde") || (ownerView && role === "ada")) && <><HandoverMarketplace role={ownerView ? "amara" : role} listingId={listing.id} />{!ownerView && <TenantHandover listingId={listing.id} />}</>}
+
+      {listing.mode === "rent" && ((!ownerView && role === "tunde") || (ownerView && role === "ada")) && (
+        <>
+          <HandoverMarketplace role={role} listingId={listing.id} />
+          {!ownerView && <TenantHandover listingId={listing.id} />}
+        </>
+      )}
+
       {ownerView && <Card className="p-5 grid gap-4"><h2 className="font-display text-[22px]">Messages</h2><Thread listing={listing} role="ada" onBack={() => go({ name: "landlord", role: "ada" })} /></Card>}
       {ownerView && <Tray open={editing} onClose={() => setEditing(false)} title="Edit listing"><form onSubmit={saveEdit} className="grid gap-4"><Field label="Price (₦)"><input type="number" min="1" inputMode="numeric" required className={inputCls} value={editPrice} onChange={e => setEditPrice(e.target.value)} /></Field><Field label="Description"><textarea rows={4} className={inputCls} value={editDescription} onChange={e => setEditDescription(e.target.value)} /></Field><Field label="Replace photo (max 900 KB)"><input type="file" accept="image/*" onChange={onPhoto} className="block max-w-full min-h-[44px] text-sm" /></Field>{editError && <p role="alert" className="text-[14px] text-[#793400]">{editError}</p>}{editImage && <img src={editImage} alt="Listing preview" className="h-36 w-full rounded-xl object-cover" />}<div className="flex flex-wrap gap-2"><Button type="submit">Save changes</Button><Button type="button" variant="secondary" onClick={() => setEditing(false)}>Cancel</Button></div></form></Tray>}
-      <Tray open={threading} onClose={() => setThreading(false)} title={`Message ${ROLES[listing.owner].short}`} layoutId={`msg-${listing.id}`}><Thread listing={listing} role={role} onBack={() => setThreading(false)} /></Tray>
+      
+      {threading && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden">
+             <Thread listing={listing} role={role} onBack={() => setThreading(false)} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
