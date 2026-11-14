@@ -130,7 +130,7 @@ export async function transferHethToSeller(amount, sellerAccount) {
       actions: [{ 
         type: "FunctionCall", 
         params: { 
-          methodName: "ft_transfer", // Direct wallet transfer
+          methodName: "ft_transfer",
           args: { receiver_id: sellerAccount, amount: String(amount), memo: "Handover item purchase" }, 
           gas: "30000000000000", 
           deposit: "1" 
@@ -138,5 +138,12 @@ export async function transferHethToSeller(amount, sellerAccount) {
       }]
     }]
   });
-  return result[0];
+  
+  // Check if the transaction failed on-chain
+  const outcome = result[0];
+  if (outcome?.status?.Failure) {
+    throw new Error("Transaction failed on-chain. Check your HETH balance.");
+  }
+  
+  return outcome;
 }
