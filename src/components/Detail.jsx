@@ -91,8 +91,9 @@ function EscrowPanel({ listing, ownerView = false }) {
   const remaining = Math.max(0, deadline - now);
   const countdown = `${Math.floor(remaining / 86400000)}d ${Math.floor(remaining % 86400000 / 3600000)}h ${Math.floor(remaining % 3600000 / 60000)}m`;
   
-  const isLandlord = account === state?.landlord;
-  const isRenter = account === state?.renter;
+  // STRICT WALLET CHECKS
+  const isLandlordWallet = account === "hearthold-landlord.testnet";
+  const isRenterWallet = account === "hearthold-renter.testnet";
   const isArbitrator = account === arbitrator;
 
   return (
@@ -107,7 +108,22 @@ function EscrowPanel({ listing, ownerView = false }) {
         <div className="grid gap-3"><p className="text-sm">Connect a NEAR testnet wallet to interact with this escrow.</p><Button onClick={connect}>Connect wallet</Button></div>
       ) : (
         <>
-          <p className="text-sm break-all">Connected: <b>{account}</b></p>
+          <div className="flex flex-col gap-1">
+            <p className="text-sm break-all">Connected Wallet: <b>{account}</b></p>
+            
+            {/* WALLET MISMATCH WARNINGS */}
+            {ownerView && !isLandlordWallet && (
+              <p className="text-sm text-red-600 font-semibold mt-2 bg-red-50 p-2 rounded">
+                Warning: You are viewing the Landlord Dashboard, but your connected wallet is {account}. Please switch your wallet to hearthold-landlord.testnet.
+              </p>
+            )}
+            {!ownerView && !isRenterWallet && (
+              <p className="text-sm text-red-600 font-semibold mt-2 bg-red-50 p-2 rounded">
+                Warning: You are viewing as the Renter, but your connected wallet is {account}. Please switch your wallet to hearthold-renter.testnet.
+              </p>
+            )}
+          </div>
+          
           {busy && !state && <p className="text-sm text-[#615d59]">Checking live agreement…</p>}
           
           {state && (
@@ -117,7 +133,8 @@ function EscrowPanel({ listing, ownerView = false }) {
             </div>
           )}
 
-          {state?.status === "listed" && !isLandlord && (
+          {/* ONLY RENTER WALLET CAN FUND */}
+          {state?.status === "listed" && isRenterWallet && !ownerView && (
             <div className="grid gap-4 bg-[#f6f5f4] p-4 rounded-xl border border-[#e6e6e6]">
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-[#31302e]">Required Deposit</span>
@@ -128,36 +145,40 @@ function EscrowPanel({ listing, ownerView = false }) {
               </Button>
             </div>
           )}
-          {state?.status === "listed" && isLandlord && <p className="text-sm text-[#615d59]">You are the landlord on this agreement. Waiting for the renter to fund it.</p>}
+          {state?.status === "listed" && isLandlordWallet && ownerView && <p className="text-sm text-[#615d59]">You are the landlord. Waiting for the renter to fund it.</p>}
 
+          {/* RENT FLOW */}
           {state && state.status === "funded" && state.agreement_type === "Rent" && !state.is_disputed && (
             <>
               <p className="text-sm">Move-in is confirmed by the connected renter. If no dispute is opened before the dispute window ends, anyone can trigger the automatic release.</p>
               <p className="text-sm">Auto-release in <b>{remaining > 0 ? countdown : "deadline reached"}</b>.</p>
               <div className="flex gap-2 flex-wrap">
-                {isRenter && <Button disabled={busy || now < moveIn} onClick={() => run(() => change("confirm_move_in", { id: Number(agreementId) }))}>Confirm move-in</Button>}
+                {isRenterWallet && <Button disabled={busy || now < moveIn} onClick={() => run(() => change("confirm_move_in", { id: Number(agreementId) }))}>Confirm move-in</Button>}
                 {now >= deadline && <Button variant="secondary" disabled={busy} onClick={() => run(() => change("auto_release", { id: Number(agreementId) }))}>Trigger auto-release</Button>}
               </div>
             </>
           )}
 
+          {/* SALE FLOW */}
           {state && state.status === "funded" && state.agreement_type === "Sale" && !state.is_disputed && (
             <>
               <p className="text-sm">For sales, the landlord confirms handover of documents/keys, and the buyer confirms receipt. Funds release when both are done.</p>
               <div className="flex gap-2 flex-wrap">
-                {isLandlord && <Button disabled={busy || state.seller_handover_confirmed} onClick={() => run(() => change("confirm_handover", { id: Number(agreementId) }))}>{state.seller_handover_confirmed ? "Handover Confirmed" : "Confirm Handover (Landlord)"}</Button>}
-                {isRenter && <Button disabled={busy || state.buyer_receipt_confirmed} onClick={() => run(() => change("confirm_receipt", { id: Number(agreementId) }))}>{state.buyer_receipt_confirmed ? "Receipt Confirmed" : "Confirm Receipt (Buyer)"}</Button>}
+                {isLandlordWallet && <Button disabled={busy || state.seller_handover_confirmed} onClick={() => run(() => change("confirm_handover", { id: Number(agreementId) }))}>{state.seller_handover_confirmed ? "Handover Confirmed" : "Confirm Handover (Landlord)"}</Button>}
+                {isRenterWallet && <Button disabled={busy || state.buyer_receipt_confirmed} onClick={() => run(() => change("confirm_receipt", { id: Number(agreementId) }))}>{state.buyer_receipt_confirmed ? "Receipt Confirmed" : "Confirm Receipt (Buyer)"}</Button>}
               </div>
             </>
           )}
 
-          {state && state.status === "funded" && !state.is_disputed && (isRenter || isLandlord) && (
+          {/* DISPUTE CONTROLS - ONLY RENTER OR LANDLORD */}
+          {state && state.status === "funded" && !state.is_disputed && (isRenterWallet || isLandlordWallet) && (
              <div className="flex gap-2 flex-wrap mt-2">
                 <input aria-label="Dispute reason" value={reason} onChange={e => setReason(e.target.value)} placeholder="Dispute reason" className={`${inputCls} min-w-0 flex-1`} />
                 <Button variant="danger" disabled={busy || !reason.trim()} onClick={() => run(() => change("open_dispute", { id: Number(agreementId), reason }))}>Open dispute</Button>
              </div>
           )}
 
+          {/* DISPUTED STATE */}
           {state && state.is_disputed && (
             <div className="grid gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
               <p className="text-sm font-semibold text-red-800">Escrow is frozen due to dispute: "{state.dispute_reason}"</p>
@@ -172,10 +193,11 @@ function EscrowPanel({ listing, ownerView = false }) {
             </div>
           )}
 
+          {/* RELEASED */}
           {state && state.status === "released" && (
             <div className="grid gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
               <p className="text-sm font-semibold text-green-800">Escrow released. This agreement is complete.</p>
-              {isRenter && (
+              {isRenterWallet && (
                 <div className="flex gap-2 items-center mt-2">
                   <select value={rating} onChange={e => setRating(Number(e.target.value))} className={inputCls}>
                     <option value={5}>5 Stars</option>
