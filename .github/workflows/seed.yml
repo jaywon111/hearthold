@@ -1,0 +1,24 @@
+name: Seed Onchain Listings
+
+on:
+  workflow_dispatch:
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Dependencies
+        run: npm install near-api-js dotenv
+
+      - name: Run Seed Script
+        env:
+          LANDLORD_PRIVATE_KEY: ${{ secrets.LANDLORD_PRIVATE_KEY }}
+        run: node scripts/seed.mjs
