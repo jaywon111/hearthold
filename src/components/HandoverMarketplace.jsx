@@ -3,7 +3,6 @@ import { newId, update, useStore } from "../lib/store.js";
 import { transferHethToSeller, getConnectedAccount, getSelector } from "../lib/near.js";
 import { Button, Card, Eyebrow, Field, Simulated, inputCls, money } from "./ui.jsx";
 
-// Fixed marketplace conversion: 1 HETH = ₦1,000,000. HETH uses 24 decimals.
 const NGN_PER_HETH = 1_000_000;
 const toHethBaseUnits = (naira) => {
   const amount = Number(naira);
@@ -28,7 +27,6 @@ export default function HandoverMarketplace({ role, listingId: listingIdProp }) 
 
   useEffect(() => { getConnectedAccount().then(setAccount).catch(() => {}); }, []);
 
-  // BULLETPROOF GATEKEEPING: Only the outgoing renter (amara) or the actual creator of the item can accept/reject.
   const isItemOwner = (item) => {
     if (role === "amara") return true; 
     if (!!account && item.sellerAccount === account) return true;
@@ -37,7 +35,7 @@ export default function HandoverMarketplace({ role, listingId: listingIdProp }) 
 
   const createItem = (e) => {
     e.preventDefault();
-    const item = { id: newId("hi"), ...form, price: Number(form.price), seller: role, sellerAccount: account, listingId, status: "available", offer: null, createdAt: new Date().toISOString() };
+    const item = { id: newId("hi"), ...form, price: Number(form.price), seller: role, sellerAccount: account || "hearthold-outgoing.testnet", listingId, status: "available", offer: null, createdAt: new Date().toISOString() };
     update((s) => { s.handoverItems ||= []; s.handoverItems.unshift(item); return s; });
     setForm(blank); setNotice("Item listed.");
   };
@@ -55,9 +53,7 @@ export default function HandoverMarketplace({ role, listingId: listingIdProp }) 
   };
 
   const act = (item, action, amount) => {
-    // DOUBLE CHECK: Block execution if not the owner
     if (!isItemOwner(item)) return;
-    
     const canRespond = action === "counter" ? item.offer?.state === "pending" && !item.offer.counterUsed : ["accept", "reject"].includes(action) && ["pending", "countered"].includes(item.offer?.state);
     if (!canRespond) return;
     
@@ -67,16 +63,44 @@ export default function HandoverMarketplace({ role, listingId: listingIdProp }) 
       if (action === "counter" && target.offer.state === "pending" && !target.offer.counterUsed && amount > 0) target.offer = { ...target.offer, state: "countered", counterAmount: Number(amount), counterUsed: true };
       if (action === "accept" && ["pending", "countered"].includes(target.offer.state)) target.offer = { ...target.offer, state: "accepted", agreedAmount: target.offer.state === "countered" ? target.offer.counterAmount : target.offer.amount };
       if (action === "reject" && ["pending", "countered"].includes(target.offer.state)) target.offer = { ...target.offer, state: "rejected" };
-      if (action === "hold" && target.offer.state === "accepted") target.offer.state = "held";
-      if (action === "release" && target.offer.state === "held") { target.offer.state = "released"; target.status = "sold"; }
       return s;
     });
   };
 
+  const handlePay = async (item, incoming) => {
+    setNotice("");
+    setBusyItem(item.id);
+    try {
+      const transferAmount = toHethBaseUnits(incoming.agreedAmount || incoming.amount);
+      const seller = item.sellerAccount || "hearthold-outgoing.testnet"; // Fallback if missing
+      
+      const outcome = await transferHethToSeller(transferAmount, seller);
+      const failed = outcome?.status?.Failure || outcome?.transaction_outcome?.outcome?.status?.Failure;
+      
+      if (failed) throw new Error("Transaction failed on-chain.");
+      
+      setNotice("HETH transfer confirmed! You bought the item.");
+      // Mark item as sold locally after payment
+      update(s => {
+        const target = s.handoverItems.find(x => x.id === item.id);
+        if (target) { target.status = "sold"; target.offer.state = "released"; }
+        return s;
+      });
+    } catch (error) {
+      setNotice(error?.message || "Payment failed. Did you reject the wallet prompt?");
+    } finally {
+      setBusyItem("");
+    }
+  };
+
   return <section className="relative grid min-w-0 gap-8 border-y border-[#d8d0c4] bg-[#f6f3ec] px-5 py-10 sm:px-8 md:gap-12 md:px-12 md:py-16 lg:px-16" aria-label="Handover item marketplace">
+    
+    {/* Display Notice/Error Messages at the top */}
+    {notice && <div className="bg-[#e5f1ea] p-4 rounded-xl text-[#244b38] font-medium text-center">{notice}</div>}
+
     <div className="grid gap-5 border-b border-[#d8d0c4] pb-8 md:grid-cols-[minmax(0,1fr)_minmax(220px,0.55fr)] md:items-end md:gap-12 md:pb-12">
       <div><Eyebrow>Handover marketplace</Eyebrow><h2 className="mt-3 max-w-[16ch] font-display text-[clamp(36px,5.3vw,64px)] leading-[0.98] tracking-[-0.035em]">What stays. What moves on.</h2></div>
-      <div className="md:pb-1"><p className="max-w-[38ch] text-base leading-relaxed text-[#615d59] md:text-lg">A considered handover starts with the pieces that make a place feel like home. Agree a price before move-in.</p><p className="mt-4 font-mono text-[11px] uppercase tracking-[0.16em] text-[#615d59]">Buyer pays seller directly via HETH.</p></div>
+      <div className="md:pb-1"><p className="max-w-[38ch] text-base leading-relaxed text-[#615d59] md:text-lg">A considered handover starts with the pieces that make a place feel like home.</p></div>
     </div>
     
     {role === "amara" && !listingIdProp && <div className="border-b border-[#d8d0c4] pb-8">
@@ -86,7 +110,7 @@ export default function HandoverMarketplace({ role, listingId: listingIdProp }) 
         <div className="grid gap-5 sm:grid-cols-2"><Field label="Item name"><input required className={inputCls} placeholder="e.g. dining table" value={form.title} onChange={e=>setForm({...form,title:e.target.value})}/></Field><Field label="Price (₦)"><input required min="1" type="number" className={inputCls} value={form.price} onChange={e=>setForm({...form,price:e.target.value})}/></Field></div>
         <Field label="Description"><input className={inputCls} placeholder="Condition, size, pickup details" value={form.description} onChange={e=>setForm({...form,description:e.target.value})}/></Field>
         <Field label="Photo URL"><input type="url" className={inputCls} placeholder="https://…" value={form.image} onChange={e=>setForm({...form,image:e.target.value})}/></Field>
-        <div className="flex items-center gap-3"><Button type="submit">List item</Button>{notice&&<span role="status" className="text-sm text-[#087443]">{notice}</span>}</div>
+        <Button type="submit">List item</Button>
       </form>
     </div>}
 
@@ -109,7 +133,6 @@ export default function HandoverMarketplace({ role, listingId: listingIdProp }) 
               <p className="font-medium">Offer: {money.format(incoming.amount)}{incoming.counterUsed&&incoming.counterAmount?` · seller countered ${money.format(incoming.counterAmount)}`:""}</p>
               <p className="text-[#615d59]">{incoming.state === "pending" ? "Waiting for item owner" : incoming.state === "countered" ? "Your response needed" : incoming.state === "accepted" ? "Offer accepted" : incoming.state === "rejected" ? "Offer declined" : ""}</p>
               
-              {/* ONLY SHOW THESE BUTTONS TO THE ITEM OWNER (AMARA) */}
               {isSeller && incoming.state === "pending" && <div className="flex flex-wrap gap-2">
                 <Button onClick={()=>act(item,"accept")}>Accept offer</Button>
                 {!incoming.counterUsed&&<Button variant="secondary" onClick={()=>{const val=window.prompt("Counter-offer amount in naira");if(val&&Number(val)>0)act(item,"counter",Number(val));}}>Counter once</Button>}
@@ -122,21 +145,9 @@ export default function HandoverMarketplace({ role, listingId: listingIdProp }) 
               </div>}
               
               {!isSeller && incoming.state === "accepted" && <div className="grid justify-items-start gap-2">
-                <Button onClick={async()=>{
-                  let transferAmount;
-                  try { transferAmount = toHethBaseUnits(incoming.agreedAmount || incoming.amount); } catch (error) { setNotice(error?.message || "Invalid offer amount."); return; }
-                  try {
-                    const selector = await getSelector();
-                    const buyer = selector.store.getState().accounts[0]?.accountId;
-                    if (!buyer || buyer !== account) throw new Error("Connect the buyer wallet for this accepted offer.");
-                    setBusyItem(item.id);
-                    const outcome = await transferHethToSeller(transferAmount, item.sellerAccount);
-                    const failed = outcome?.status?.Failure || outcome?.transaction_outcome?.outcome?.status?.Failure || outcome?.final_execution_outcome?.status?.Failure;
-                    if (failed) throw new Error("HETH transfer failed on testnet.");
-                    setNotice("HETH transfer confirmed on testnet.");
-                  } catch (error) { setNotice(error?.message || "HETH transfer failed."); }
-                  finally { setBusyItem(""); }
-                }}>Pay with HETH</Button>
+                <Button disabled={busyItem === item.id} onClick={() => handlePay(item, incoming)}>
+                  {busyItem === item.id ? "Confirming on-chain..." : "Pay with HETH"}
+                </Button>
                 <span className="text-xs text-[#615d59]">Testnet HETH direct transfer to the outgoing tenant.</span>
               </div>}
             </div>}
