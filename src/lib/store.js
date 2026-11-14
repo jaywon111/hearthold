@@ -17,7 +17,7 @@ export function detectFraud(text) {
   // Off-platform keywords
   const badWords = [
     "whatsapp", "telegram", "bank transfer", "account number", 
-    "send money", "outside the app", "cash app", "western union", 
+    "send money", "outside the app", "account name", "western union", 
     "gift card", "crypto", "bitcoin", "agent fee via transfer"
   ];
   
