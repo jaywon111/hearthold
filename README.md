@@ -8,13 +8,13 @@ Built for the **NEAR Hackathon 2026** — Track: **Real-World Money (Bring the b
 
 ---
 
-## 🎯 The Problem
+## The Problem
 
 Securing housing deposits in Nigeria (and across Africa) is riddled with trust issues. Renters fear losing their money to fake landlords or properties that don't match the description. Landlords fear tenants who squat, damage property, or refuse to pay. 
 
 Furthermore, when a tenant moves out, they often want to sell furniture or appliances to the incoming tenant. This is usually done via unsecured cash transfers, leading to P2P scams.
 
-## 💡 The Solution: Hearthold
+## The Solution: Hearthold
 
 Hearthold brings real-world rental and housing transactions onchain using NEAR’s fast, low-cost infrastructure. We built a fully functional dApp that combines a **Rental Escrow**, a **Sale Escrow**, and a **Renter-to-Renter Handover Marketplace**.
 
@@ -28,7 +28,7 @@ Hearthold brings real-world rental and housing transactions onchain using NEAR�
 
 ---
 
-## 🛠 How NEAR is Used
+## How NEAR is Used
 
 - **Smart Contract (Rust / `near-sdk`):** Deployed to `hearthold-escrow.testnet`. Handles the state machine for agreements, dispute freezing, and token distribution.
 - **NEP-141 Token (HETH):** We use a custom fungible token (`ft.hearthold-jay.testnet`) to simulate stablecoin payments, demonstrating how real-world fiat (NGN) can be brought onchain.
@@ -37,7 +37,7 @@ Hearthold brings real-world rental and housing transactions onchain using NEAR�
 
 ---
 
-## 🏗 Architecture & Tech Stack
+## Architecture & Tech Stack
 
 **Frontend:**
 - React 18 + Vite + React Router
@@ -52,7 +52,7 @@ Hearthold brings real-world rental and housing transactions onchain using NEAR�
 
 ---
 
-## 🧪 How to Test the Demo (Judge's Guide)
+## How to Test the Demo (Judge's Guide)
 
 The app features a **Persona Switcher** in the top left corner to simulate different users. 
 *(Note: In this testnet demo, you will need to switch wallets in your browser extension to act as different personas).*
@@ -68,7 +68,7 @@ The app features a **Persona Switcher** in the top left corner to simulate diffe
 2. Disconnect, switch to **Tunde**, and go to "Explore". Find the listing and click **Fund Escrow**. Approve the transaction.
 3. As **Tunde**, click **Confirm Move-in**. The HETH instantly releases to Ada.
 
-### Flow 2: The AI Dispute (Killer Feature)
+### Flow 2: The AI Dispute
 1. As **Tunde**, fund a new listing.
 2. Instead of confirming move-in, open a dispute with the text: *"The landlord refused to fix the leaking roof and the bedroom is flooded."*
 3. The UI will freeze (Disputed status).
@@ -88,7 +88,7 @@ The app features a **Persona Switcher** in the top left corner to simulate diffe
 
 ---
 
-## 📍 Deployed Addresses (Testnet)
+## Deployed Addresses (Testnet)
 
 - **Escrow Contract:** `hearthold-escrow.testnet`
 - **HETH Token Contract:** `ft.hearthold-jay.testnet`
@@ -96,7 +96,7 @@ The app features a **Persona Switcher** in the top left corner to simulate diffe
 
 ---
 
-## 🚀 Running Locally
+## Running Locally
 
 1. Clone the repository: `git clone https://github.com/jaywon111/hearthold.git`
 2. Install dependencies: `npm install`
