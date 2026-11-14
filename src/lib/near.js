@@ -131,7 +131,19 @@ export async function transferHethToSeller(amount, sellerAccount) {
     transactions: [{
       signerId: signerId,
       receiverId: TOKEN_ID,
-      actions: [{ type: "FunctionCall", params: { methodName: "ft_transfer_call", args: { receiver_id: sellerAccount, amount: String(amount), msg: "" }, gas: "100000000000000", deposit: "1" } }]
+      actions: [{ 
+        type: "FunctionCall", 
+        params: { 
+          methodName: "ft_transfer", 
+          args: { 
+            receiver_id: sellerAccount, 
+            amount: String(amount), 
+            memo: "Handover item purchase" 
+          }, 
+          gas: "30000000000000", 
+          deposit: "1" 
+        } 
+      }]
     }]
   });
 
