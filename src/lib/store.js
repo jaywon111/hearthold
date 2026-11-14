@@ -8,26 +8,51 @@ export const ROLES = {
   amara: { id: "amara", name: "Amara Eze", short: "Amara", label: "Outgoing renter" },
 };
 
-export const FRAUD_PHRASES = ["pay outside the app", "send money to this account", "agent fee via transfer", "today only", "send now"];
+// --- UPDATED: Advanced Regex Fraud Detector ---
 export function detectFraud(text) {
-  const t = text.toLowerCase().replace(/\s+/g, " ");
-  return FRAUD_PHRASES.filter((p) => t.includes(p));
+  if (!text) return [];
+  const hits = [];
+  const lower = text.toLowerCase();
+
+  // Off-platform keywords
+  const badWords = [
+    "whatsapp", "telegram", "bank transfer", "account number", 
+    "send money", "outside the app", "cash app", "western union", 
+    "gift card", "crypto", "bitcoin", "agent fee via transfer"
+  ];
+  
+  badWords.forEach(w => {
+    if (lower.includes(w)) hits.push(w);
+  });
+
+  // Check for Nigerian phone numbers (e.g., 08012345678, +2348012345678)
+  if (/(\+?234|0)[789][01]\d{8}/.test(text.replace(/\s/g, ''))) {
+    hits.push("phone number");
+  }
+
+  // Check for 10-digit bank account numbers
+  if (/\b\d{10}\b/.test(text)) {
+    hits.push("bank account number");
+  }
+
+  return [...new Set(hits)]; 
 }
 
 const now = () => new Date().toISOString();
 const daysAgo = (n) => new Date(Date.now() - n * 86400000).toISOString();
 const daysAhead = (n) => new Date(Date.now() + n * 86400000).toISOString();
-export const FLAGGED_DEMO = "Pay outside the app today only, send money to this account and I will confirm.";
+export const FLAGGED_DEMO = "Pay outside the app today only, send money to this account on WhatsApp and I will confirm.";
 
 export function seedData() {
   return {
     savedIds: [],
+    // --- UPDATED: Added agreementId to every listing ---
     listings: [
-      { id: "l1", owner: "ada", title: "Four-bedroom duplex with boys' quarters", type: "house", mode: "rent", price: 4500000, city: "Lagos", area: "Lekki Phase 1", description: "Bright duplex on a quiet street, borehole water, 24h power backup, two parking spaces.", image: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80", photos: ["https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80", "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1200&q=80", "https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?auto=format&fit=crop&w=1200&q=80"], video: "", status: "available", created: daysAgo(12), fixtures: ["Split AC in 3 rooms", "Built-in wardrobes", "Solar inverter"] },
-      { id: "l2", owner: "ada", title: "Serviced 2-plot land, Lugbe", type: "land", mode: "sale", price: 28000000, city: "Abuja", area: "Lugbe", description: "Registered C of O, dry plot next to the new estate road. Survey plan available on request.", image: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80", photos: ["https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80", "https://images.unsplash.com/photo-1510798831971-661eb04b3739?auto=format&fit=crop&w=1200&q=80"], video: "", status: "available", created: daysAgo(30), fixtures: [] },
-      { id: "l3", owner: "ada", title: "Ground-floor shop, Bodija Market Road", type: "commercial", mode: "rent", price: 1200000, city: "Ibadan", area: "Bodija", description: "Open-plan shop front with a store room and toilet. Busy frontage, good for a pharmacy or salon.", image: "https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1200&q=80", photos: ["https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1200&q=80", "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&q=80"], video: "", status: "available", created: daysAgo(5), fixtures: ["Glass shop front", "Store room shelving"] },
-      { id: "l4", owner: "ada", title: "3-bedroom flat, Gwarinpa", type: "house", mode: "rent", price: 2600000, city: "Abuja", area: "Gwarinpa 2nd Avenue", description: "Newly tiled flat with fitted kitchen and a private compound gate.", image: "https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?auto=format&fit=crop&w=1200&q=80", photos: ["https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?auto=format&fit=crop&w=1200&q=80", "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1200&q=80"], video: "", status: "available", created: daysAgo(2), fixtures: ["Fitted kitchen"] },
-      { id: "l5", owner: "ada", title: "Commercial plot, Ring Road", type: "land", mode: "sale", price: 65000000, city: "Ibadan", area: "Ring Road", description: "Corner plot with road frontage on the Ring Road. Ideal for a showroom or small plaza.", image: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80", photos: ["https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80", "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80"], video: "", status: "available", created: daysAgo(40), fixtures: [] },
+      { id: "l1", agreementId: 1, owner: "ada", title: "Four-bedroom duplex with boys' quarters", type: "house", mode: "rent", price: 4500000, city: "Lagos", area: "Lekki Phase 1", description: "Bright duplex on a quiet street, borehole water, 24h power backup, two parking spaces.", image: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80", photos: ["https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80", "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1200&q=80", "https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?auto=format&fit=crop&w=1200&q=80"], video: "", status: "available", created: daysAgo(12), fixtures: ["Split AC in 3 rooms", "Built-in wardrobes", "Solar inverter"] },
+      { id: "l2", agreementId: 2, owner: "ada", title: "Serviced 2-plot land, Lugbe", type: "land", mode: "sale", price: 28000000, city: "Abuja", area: "Lugbe", description: "Registered C of O, dry plot next to the new estate road. Survey plan available on request.", image: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80", photos: ["https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80", "https://images.unsplash.com/photo-1510798831971-661eb04b3739?auto=format&fit=crop&w=1200&q=80"], video: "", status: "available", created: daysAgo(30), fixtures: [] },
+      { id: "l3", agreementId: 3, owner: "ada", title: "Ground-floor shop, Bodija Market Road", type: "commercial", mode: "rent", price: 1200000, city: "Ibadan", area: "Bodija", description: "Open-plan shop front with a store room and toilet. Busy frontage, good for a pharmacy or salon.", image: "https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1200&q=80", photos: ["https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1200&q=80", "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&q=80"], video: "", status: "available", created: daysAgo(5), fixtures: ["Glass shop front", "Store room shelving"] },
+      { id: "l4", agreementId: 4, owner: "ada", title: "3-bedroom flat, Gwarinpa", type: "house", mode: "rent", price: 2600000, city: "Abuja", area: "Gwarinpa 2nd Avenue", description: "Newly tiled flat with fitted kitchen and a private compound gate.", image: "https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?auto=format&fit=crop&w=1200&q=80", photos: ["https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?auto=format&fit=crop&w=1200&q=80", "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1200&q=80"], video: "", status: "available", created: daysAgo(2), fixtures: ["Fitted kitchen"] },
+      { id: "l5", agreementId: 5, owner: "ada", title: "Commercial plot, Ring Road", type: "land", mode: "sale", price: 65000000, city: "Ibadan", area: "Ring Road", description: "Corner plot with road frontage on the Ring Road. Ideal for a showroom or small plaza.", image: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80", photos: ["https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80", "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80"], video: "", status: "available", created: daysAgo(40), fixtures: [] },
     ],
     messages: [
       { id: "m1", listingId: "l1", from: "tunde", to: "ada", text: "Good day. Is the duplex still available from December?", at: daysAgo(2), flagged: [] },
@@ -52,7 +77,11 @@ function migrate(data) {
   data.savedIds ||= [];
   for (const base of seed.listings) {
     const current = data.listings.find((l) => l.id === base.id);
-    if (current) { current.image = base.image; current.photos = base.photos || [base.image]; }
+    if (current) { 
+      current.image = base.image; 
+      current.photos = base.photos || [base.image]; 
+      current.agreementId = base.agreementId; // Inject the agreement ID
+    }
   }
   data.messages ||= [];
   for (const base of seed.messages) {
@@ -68,6 +97,7 @@ function migrate(data) {
   data.handoverMessages.forEach((m) => { if (!m.listingId) m.listingId = data.handovers.amara?.listingId || seed.handovers.amara.listingId; });
   return data;
 }
+
 function load() {
   try {
     const raw = localStorage.getItem(KEY);
@@ -75,6 +105,7 @@ function load() {
   } catch { /* fall through to seed */ }
   return seedData();
 }
+
 let state = null;
 const listeners = new Set();
 function getState() { if (state === null) state = load(); return state; }
