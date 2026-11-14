@@ -61,7 +61,6 @@ export async function change(methodName, args = {}, deposit = "0") {
       actions: [{ type: "FunctionCall", params: { methodName, args, gas: "100000000000000", deposit } }]
     }]
   });
-
   return result[0];
 }
 
@@ -86,13 +85,11 @@ function readReturn(outcome) {
 export async function listProperty({ amount, moveInTimeNs, disputeWindowNs, agreementType = "Rent" }) {
   const result = await change("list_property", {
     amount: String(amount),
-    move_in_time_ns: Number(moveInTimeNs), 
-    dispute_window_ns: Number(disputeWindowNs), 
+    move_in_time_ns: Number(moveInTimeNs),
+    dispute_window_ns: Number(disputeWindowNs),
     agreement_type_str: agreementType
-  }, "100000000000000000000000"); // 0.1 NEAR deposit
-  
-  const id = readReturn(result);
-  return { result, agreementId: id };
+  }, "100000000000000000000000"); // 0.1 NEAR storage deposit
+  return { result, agreementId: readReturn(result) };
 }
 
 export async function depositToken(tokenAmount, agreementId) {
@@ -109,7 +106,6 @@ export async function depositToken(tokenAmount, agreementId) {
       actions: [{ type: "FunctionCall", params: { methodName: "ft_transfer_call", args: { receiver_id: CONTRACT_ID, amount: String(tokenAmount), msg: String(agreementId) }, gas: "100000000000000", deposit: "1" } }]
     }]
   });
-
   return result[0];
 }
 
@@ -134,18 +130,13 @@ export async function transferHethToSeller(amount, sellerAccount) {
       actions: [{ 
         type: "FunctionCall", 
         params: { 
-          methodName: "ft_transfer", 
-          args: { 
-            receiver_id: sellerAccount, 
-            amount: String(amount), 
-            memo: "Handover item purchase" 
-          }, 
+          methodName: "ft_transfer", // Direct wallet transfer
+          args: { receiver_id: sellerAccount, amount: String(amount), memo: "Handover item purchase" }, 
           gas: "30000000000000", 
           deposit: "1" 
         } 
       }]
     }]
   });
-
   return result[0];
 }
