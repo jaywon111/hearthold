@@ -65,30 +65,35 @@ export default function HandoverMarketplace({ role, listingId: listingIdProp }) 
   };
 
   const handlePay = async (item, incoming) => {
-    if (!isRenterWallet) return setNotice("Error: Connect Tunde's wallet to pay.");
-    setNotice("");
-    setBusyItem(item.id);
-    try {
-      const transferAmount = toHethBaseUnits(incoming.agreedAmount || incoming.amount);
-      const seller = item.sellerAccount || "hearthold-outgoing.testnet";
-      
-      const outcome = await transferHethToSeller(transferAmount, seller);
-      const failed = outcome?.status?.Failure || outcome?.transaction_outcome?.outcome?.status?.Failure;
-      
-      if (failed) throw new Error("Transaction failed on-chain.");
-      
-      setNotice("HETH transfer confirmed! You bought the item.");
-      update(s => {
-        const target = s.handoverItems.find(x => x.id === item.id);
-        if (target) { target.status = "sold"; target.offer.state = "released"; }
-        return s;
-      });
-    } catch (error) {
-      setNotice(error?.message || "Payment failed. Did you reject the wallet prompt?");
-    } finally {
-      setBusyItem("");
-    }
-  };
+  if (!isRenterWallet) return setNotice("Error: Connect Tunde's wallet to pay.");
+  setNotice("");
+  setBusyItem(item.id);
+
+  try {
+    const transferAmount = toHethBaseUnits(incoming.agreedAmount || incoming.amount);
+    const seller = item.sellerAccount || "hearthold-outgoing.testnet";
+    
+    // 1. Send the transaction
+    await transferHethToSeller(transferAmount, seller);
+    
+    // 2. Update the local store
+    update(s => {
+      const target = s.handoverItems.find(x => x.id === item.id);
+      if (target) { 
+        target.status = "sold"; 
+        target.offer.state = "released"; 
+      }
+      return s;
+    });
+
+    setNotice("HETH transfer confirmed! You bought the item.");
+  } catch (error) {
+    console.error("Payment error:", error);
+    setNotice(error?.message || "Payment failed or was rejected.");
+  } finally {
+    setBusyItem("");
+  }
+};
 
   return <section className="relative grid min-w-0 gap-8 border-y border-[#d8d0c4] bg-[#f6f3ec] px-5 py-10 sm:px-8 md:gap-12 md:px-12 md:py-16 lg:px-16">
     
